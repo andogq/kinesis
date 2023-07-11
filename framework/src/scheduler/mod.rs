@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
-use web_sys::{console, Document, HtmlElement, MouseEvent};
+use web_sys::{console, Document, Event, HtmlElement};
 
 use crate::component::{Component, ComponentController};
 
@@ -9,7 +9,7 @@ pub type SchedulerRef = Rc<RefCell<Scheduler>>;
 
 /// Closure type that is used to handle DOM events, and trigger relevant events within the
 /// scheduler.
-pub type EventCallbackClosure = Closure<dyn Fn(MouseEvent)>;
+pub type EventCallbackClosure = Closure<dyn Fn(Event)>;
 
 /// Main scheduler of the framework. Queues and executes events, and is the owner of any
 /// [components](Component) used within the framework. Depending on events that are generated, it
@@ -41,7 +41,9 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    /// Provides a new [Scheduler] **without** a reference to itself.
+    /// Provides a new [Scheduler] **without** a reference to itself. Note that this variation
+    /// cannot be used to create components, as there is no way for events to propagate back to the
+    /// scheduler.
     pub fn new(document: Document) -> Self {
         Self {
             self_ref: None,
@@ -92,9 +94,13 @@ impl Scheduler {
             // event
             let scheduler = Rc::clone(self.self_ref.as_ref().expect("to have self ref"));
 
-            Closure::<dyn Fn(_)>::new(move |event: MouseEvent| {
-                // Trigger event within scheduler
-                // TODO: Work out an event object
+            Closure::<dyn Fn(_)>::new(move |event: Event| {
+                // Trigger event within scheduler. When an event is received, the target is
+                // checked, and the ID is extracted from an attribute. This ID contains information
+                // about the component that the element belongs to, as well as the specific
+                // location of the element. This can be used to a) trigger the event on the
+                // relevant component, and b) allow the component controller to trigger the correct
+                // handler based off of the event listener in the markup.
                 let target = event
                     .target()
                     .expect("event to have target")
