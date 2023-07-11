@@ -18,10 +18,13 @@ impl Component for Counter {
         self.count += 1;
     }
 
-    fn render(&self) -> Option<(DomNode, Vec<EventListener>)> {
+    fn render(&self) -> Option<(Vec<DomNode>, Vec<EventListener>)> {
         Some((
-            DomNode::p().text_content(&format!("The current count is {}", self.count)),
-            vec![EventListener::new(0, "click")],
+            vec![
+                DomNode::p().text_content(&format!("The current count is {}", self.count)),
+                DomNode::button().text_content("Click me!"),
+            ],
+            vec![EventListener::new(1, "click")],
         ))
     }
 }

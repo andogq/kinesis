@@ -32,7 +32,7 @@ pub trait Component {
     fn handle_event(&mut self);
 
     /// Renders the component for a given state. Can optionally not render anything.
-    fn render(&self) -> Option<(DomNode, Vec<EventListener>)>;
+    fn render(&self) -> Option<(Vec<DomNode>, Vec<EventListener>)>;
 }
 
 pub struct ComponentController<C> {
@@ -59,31 +59,35 @@ where
     }
 
     pub fn render(&mut self, event_callback_closure: &EventCallbackClosure) -> Result<(), JsValue> {
-        if let Some((node, listener_map)) = self.component.render() {
-            // Convert node to Element
-            let el = node.build(&self.document)?;
+        if let Some((nodes, listener_map)) = self.component.render() {
+            for (i, node) in nodes.into_iter().enumerate() {
+                // Convert node to Element
+                let el = node.build(&self.document)?;
 
-            // Apply required event listeners
-            for listener in listener_map {
-                el.add_event_listener_with_callback(
-                    &listener.event_type,
-                    event_callback_closure.as_ref().unchecked_ref(),
-                )?;
+                // Apply required event listeners
+                listener_map
+                    .iter()
+                    .filter(|listener| listener.element_path[0] == i)
+                    .try_for_each(|listener| {
+                        el.add_event_listener_with_callback(
+                            &listener.event_type,
+                            event_callback_closure.as_ref().unchecked_ref(),
+                        )
+                    })?;
+
+                // Add to the DOM
+                if let Some(element) = self.elements.get(&i) {
+                    // Update an existing element
+                    element.replace_with_with_node_1(&el)?;
+                } else {
+                    // Create a new element in the DOM
+                    let body = self.document.body().expect("body to exist");
+                    body.append_child(&el)?;
+                }
+
+                // Save the newly created element for future reference
+                self.elements.insert(i, el);
             }
-
-            // Add to the DOM
-            // TODO: Hardcoded for a single element for now
-            if let Some(element) = self.elements.get(&0) {
-                // Update an existing element
-                element.replace_with_with_node_1(&el)?;
-            } else {
-                // Create a new element in the DOM
-                let body = self.document.body().expect("body to exist");
-                body.append_child(&el)?;
-            }
-
-            // Save the newly created element for future reference
-            self.elements.insert(0, el);
         }
 
         Ok(())
