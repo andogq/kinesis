@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
 use wasm_bindgen::prelude::*;
-use web_sys::{console, window, Document, Element, MouseEvent};
+use web_sys::{console, window, Document, Element, MouseEvent, Node};
 
 enum DomNodeKind {
     Div,
@@ -56,6 +56,7 @@ impl Counter {
     }
 
     pub fn render(&self) -> Option<DomNode> {
+        console::log_1(&format!("rendering {}", self.count).into());
         Some(DomNode::p().text_content(&format!("The current count is {}", self.count)))
     }
 }
@@ -65,7 +66,11 @@ struct Scheduler {
 
     running: bool,
     events: VecDeque<usize>,
-    components: Vec<(Counter, Box<dyn Fn(&Document, &Counter)>)>,
+    components: Vec<(
+        Counter,
+        Option<Element>,
+        Box<dyn Fn(&Document, &Counter, Option<Element>) -> Element>,
+    )>,
 }
 impl Scheduler {
     pub fn new(document: Document) -> Self {
@@ -82,9 +87,9 @@ impl Scheduler {
             console::log_1(&format!("running event {event}").into());
 
             // Find element matching id
-            if let Some((ref mut component, render)) = self.components.get_mut(event) {
+            if let Some((ref mut component, target, render)) = self.components.get_mut(event) {
                 component.handle_event();
-                render(&self.document, component);
+                *target = Some(render(&self.document, component, target.take()));
             }
         }
 
@@ -102,10 +107,10 @@ impl Scheduler {
     pub fn add_component(
         &mut self,
         component: Counter,
-        render: Box<dyn Fn(&Document, &Counter)>,
+        render: Box<dyn Fn(&Document, &Counter, Option<Element>) -> Element>,
     ) -> usize {
         let id = self.components.len();
-        self.components.push((component, render));
+        self.components.push((component, None, render));
         id
     }
 }
@@ -123,23 +128,28 @@ pub fn main() -> Result<(), JsValue> {
     let id = scheduler.add_component(counter, {
         let scheduler_rc = Rc::clone(&scheduler_rc);
 
-        Box::new(move |document, counter| {
+        Box::new(move |document, counter, replace_with| {
             if let Some(el) = counter.render() {
                 let el = el.build(document).unwrap();
 
                 let scheduler = Rc::clone(&scheduler_rc);
                 let callback = Closure::<dyn Fn(_)>::new(move |event: MouseEvent| {
-                    // TODO: Work out how to get message out from here to trigger a re-render
-                    console::log_1(&"click".into());
-
                     scheduler.borrow_mut().add_event(0);
                 });
 
                 el.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref());
-                body.append_child(&el.into());
-
                 callback.forget();
+
+                if let Some(target) = replace_with {
+                    target.replace_with_with_node_1(&el);
+                } else {
+                    body.append_child(&el).unwrap();
+                }
+
+                return el;
             }
+
+            unreachable!()
         })
     });
 
