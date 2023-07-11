@@ -16,7 +16,9 @@ features = [
     "Element",
     "HtmlElement",
     "Node",
+    "EventTarget",
     "Window",
     "MouseEvent",
     "console",
+    "DomStringMap",
 ]

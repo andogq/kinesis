@@ -36,6 +36,8 @@ pub trait Component {
 }
 
 pub struct ComponentController<C> {
+    component_id: usize,
+
     component: C,
     document: Document,
 
@@ -50,8 +52,9 @@ where
     C: DerefMut,
     C::Target: Component,
 {
-    pub fn new(component: C, document: &Document) -> Self {
+    pub fn new(component_id: usize, component: C, document: &Document) -> Self {
         Self {
+            component_id,
             component,
             document: document.clone(),
             elements: HashMap::new(),
@@ -60,14 +63,22 @@ where
 
     pub fn render(&mut self, event_callback_closure: &EventCallbackClosure) -> Result<(), JsValue> {
         if let Some((nodes, listener_map)) = self.component.render() {
-            for (i, node) in nodes.into_iter().enumerate() {
+            for (id, node) in nodes.into_iter().enumerate() {
                 // Convert node to Element
                 let el = node.build(&self.document)?;
+
+                // Save the ID on the element
+                let full_id = [self.component_id, id]
+                    .into_iter()
+                    .map(|n| n.to_string())
+                    .collect::<Vec<_>>()
+                    .join(".");
+                el.set_attribute("data-element-id", &full_id)?;
 
                 // Apply required event listeners
                 listener_map
                     .iter()
-                    .filter(|listener| listener.element_path[0] == i)
+                    .filter(|listener| listener.element_path[0] == id)
                     .try_for_each(|listener| {
                         el.add_event_listener_with_callback(
                             &listener.event_type,
@@ -76,7 +87,7 @@ where
                     })?;
 
                 // Add to the DOM
-                if let Some(element) = self.elements.get(&i) {
+                if let Some(element) = self.elements.get(&id) {
                     // Update an existing element
                     element.replace_with_with_node_1(&el)?;
                 } else {
@@ -86,7 +97,7 @@ where
                 }
 
                 // Save the newly created element for future reference
-                self.elements.insert(i, el);
+                self.elements.insert(id, el);
             }
         }
 

@@ -1,13 +1,8 @@
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
-use wasm_bindgen::{prelude::Closure, JsValue};
-use web_sys::{console, Document, Element, MouseEvent};
+use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
+use web_sys::{console, Document, HtmlElement, MouseEvent};
 
 use crate::component::{Component, ComponentController};
-
-struct ComponentEntry {
-    component: Box<dyn Component>,
-    element: Option<Element>,
-}
 
 /// Helper type for [Scheduler] for berevity.
 pub type SchedulerRef = Rc<RefCell<Scheduler>>;
@@ -97,10 +92,25 @@ impl Scheduler {
             // event
             let scheduler = Rc::clone(self.self_ref.as_ref().expect("to have self ref"));
 
-            Closure::<dyn Fn(_)>::new(move |_event: MouseEvent| {
+            Closure::<dyn Fn(_)>::new(move |event: MouseEvent| {
                 // Trigger event within scheduler
                 // TODO: Work out an event object
-                scheduler.borrow_mut().add_event(0);
+                let target = event
+                    .target()
+                    .expect("event to have target")
+                    .dyn_into::<HtmlElement>()
+                    .expect("to be an element");
+                let id = target
+                    .dataset()
+                    .get("elementId")
+                    .expect("`data-element-id` attribute to exist")
+                    .split('.')
+                    .map(|n| n.parse::<usize>())
+                    .collect::<Result<Vec<_>, _>>()
+                    .expect("valid usize id stored in attribute");
+
+                // TODO: Emit rest of ID with event
+                scheduler.borrow_mut().add_event(id[0]);
             })
         });
 
@@ -117,10 +127,9 @@ impl Scheduler {
         self.run();
     }
 
-    pub fn add_component(&mut self, component: Box<dyn Component>) -> usize {
+    pub fn add_component(&mut self, component: Box<dyn Component>) {
         let id = self.components.len();
         self.components
-            .push(ComponentController::new(component, &self.document));
-        id
+            .push(ComponentController::new(id, component, &self.document));
     }
 }
