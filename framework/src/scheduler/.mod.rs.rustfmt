@@ -1,0 +1,90 @@
+use std::{cell::RefCell, collections::VecDeque, rc::Rc};
+use web_sys::{console, Document, Element};
+
+use crate::component::Component;
+
+pub type ComponentRenderCallback =
+    fn(&'_ Document, &'_ mut Box<dyn Component>, Option<Element>) -> Element;
+
+struct ComponentEntry {
+    component: Box<dyn Component>,
+    element: Option<Element>,
+    render: ComponentRenderCallback,
+}
+
+/// Helper type for [Scheduler] for berevity.
+pub type SchedulerRef = Rc<RefCell<Scheduler>>;
+
+/// Main scheduler of the framework. Queues and executes events, and is the owner of any
+pub struct Scheduler {
+    self_ref: Option<SchedulerRef>,
+
+    document: Document,
+
+    running: bool,
+    events: VecDeque<usize>,
+    components: Vec<ComponentEntry>,
+}
+
+impl Scheduler {
+    pub fn new(document: Document) -> Self {
+        Self {
+            self_ref: None,
+            document,
+            running: false,
+            events: VecDeque::new(),
+            components: Vec::new(),
+        }
+    }
+
+    pub fn new_with_ref(document: Document) -> SchedulerRef {
+        let scheduler = Self::new(document);
+        let rc = Rc::new(RefCell::new(scheduler));
+
+        let moveable_rc = Rc::clone(&rc);
+        rc.borrow_mut().self_ref = Some(moveable_rc);
+
+        rc
+    }
+
+    pub fn run(&mut self) {
+        while let Some(event) = self.events.pop_front() {
+            console::log_1(&format!("running event {event}").into());
+
+            // Find element matching id
+            if let Some(ComponentEntry {
+                component,
+                element,
+                render,
+            }) = self.components.get_mut(event)
+            {
+                component.handle_event();
+                *element = Some(render(&self.document, component, element.take()));
+            }
+        }
+
+        self.running = false;
+    }
+
+    pub fn add_event(&mut self, event: usize) {
+        self.events.push_back(event);
+
+        if !self.running {
+            self.run();
+        }
+    }
+
+    pub fn add_component(
+        &mut self,
+        component: Box<dyn Component>,
+        render: ComponentRenderCallback,
+    ) -> usize {
+        let id = self.components.len();
+        self.components.push(ComponentEntry {
+            component,
+            element: None,
+            render,
+        });
+        id
+    }
+}

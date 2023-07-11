@@ -1,18 +1,27 @@
-use crate::dom::DomNode;
+use crate::{
+    component::{Component, EventListener},
+    dom::DomNode,
+};
 
-use web_sys::console;
-
-#[derive(Default)]
 pub struct Counter {
     count: usize,
 }
+
 impl Counter {
-    pub fn handle_event(&mut self) {
+    pub fn new() -> Self {
+        Self { count: 0 }
+    }
+}
+
+impl Component for Counter {
+    fn handle_event(&mut self) {
         self.count += 1;
     }
 
-    pub fn render(&self) -> Option<DomNode> {
-        console::log_1(&format!("rendering {}", self.count).into());
-        Some(DomNode::p().text_content(&format!("The current count is {}", self.count)))
+    fn render(&self) -> Option<(DomNode, Vec<EventListener>)> {
+        Some((
+            DomNode::p().text_content(&format!("The current count is {}", self.count)),
+            vec![EventListener::new(0, "click")],
+        ))
     }
 }
