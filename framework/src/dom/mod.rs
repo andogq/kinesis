@@ -4,6 +4,7 @@ use web_sys::{Document, Element};
 pub enum DomNodeKind {
     Div,
     P,
+    Button,
 }
 impl Default for DomNodeKind {
     fn default() -> Self {
@@ -12,9 +13,12 @@ impl Default for DomNodeKind {
 }
 impl From<DomNodeKind> for &str {
     fn from(dom_node_kind: DomNodeKind) -> &'static str {
+        use DomNodeKind::*;
+
         match dom_node_kind {
-            DomNodeKind::Div => "div",
-            DomNodeKind::P => "p",
+            Div => "div",
+            P => "p",
+            Button => "button",
         }
     }
 }
@@ -28,6 +32,13 @@ impl DomNode {
     pub fn p() -> Self {
         Self {
             kind: DomNodeKind::P,
+            ..Default::default()
+        }
+    }
+
+    pub fn button() -> Self {
+        Self {
+            kind: DomNodeKind::Button,
             ..Default::default()
         }
     }

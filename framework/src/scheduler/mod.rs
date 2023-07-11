@@ -1,8 +1,8 @@
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
-use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
+use wasm_bindgen::{prelude::Closure, JsValue};
 use web_sys::{console, Document, Element, MouseEvent};
 
-use crate::component::Component;
+use crate::component::{Component, ComponentController};
 
 struct ComponentEntry {
     component: Box<dyn Component>,
@@ -12,38 +12,37 @@ struct ComponentEntry {
 /// Helper type for [Scheduler] for berevity.
 pub type SchedulerRef = Rc<RefCell<Scheduler>>;
 
-/// Main scheduler of the framework. Queues and executes events, and is
-/// the owner of any [components](Component) used within the framework.
-/// Depending on events that are generated, it will trigger handlers on
-/// the components and cause them to be re-rendered.
+/// Closure type that is used to handle DOM events, and trigger relevant events within the
+/// scheduler.
+pub type EventCallbackClosure = Closure<dyn Fn(MouseEvent)>;
+
+/// Main scheduler of the framework. Queues and executes events, and is the owner of any
+/// [components](Component) used within the framework. Depending on events that are generated, it
+/// will trigger handlers on the components and cause them to be re-rendered.
 pub struct Scheduler {
-    /// Optional self reference to the same instance of the scheduler.
-    /// This allow for easy sharing of the scheduler to components as
-    /// they are created.
+    /// Optional self reference to the same instance of the scheduler. This allow for easy sharing
+    /// of the scheduler to components as they are created.
     ///
     /// TODO: Need to work out if this is even required.
     self_ref: Option<SchedulerRef>,
 
-    /// Ownership to [Document] for the current page, providing the
-    /// scheduler with full control to create and manipulate elements.
+    /// Ownership to [Document] for the current page, providing the scheduler with full control to
+    /// create and manipulate elements.
     document: Document,
 
-    /// Indicates whether the scheduler is running or not. Events are
-    /// executed in a blocking fasion until they are exhausted, causing
-    /// the scheduler to stop once again. This allows for easy tracking
-    /// of whether the scheduler should be started again.
+    /// Indicates whether the scheduler is running or not. Events are executed in a blocking fasion
+    /// until they are exhausted, causing the scheduler to stop once again. This allows for easy
+    /// tracking of whether the scheduler should be started again.
     running: bool,
-    /// Queue of events to execute. [VecDeque] allows for events to be
-    /// executed in the order they are pushed onto the queue (by
-    /// popping them off).
+    /// Queue of events to execute. [VecDeque] allows for events to be executed in the order they
+    /// are pushed onto the queue (by popping them off).
     events: VecDeque<usize>,
-    /// Location of all of the components within the application,
-    /// providing the scheduler with unrestricted access to them without
-    /// mutability or ownership concerns.
-    components: Vec<ComponentEntry>,
+    /// Location of all of the components within the application, providing the scheduler with
+    /// unrestricted access to them without mutability or ownership concerns.
+    components: Vec<ComponentController<Box<dyn Component>>>,
 
     /// Used to cache a universal callback for DOM events
-    cached_callback: Option<Closure<dyn Fn(MouseEvent)>>,
+    cached_callback: Option<EventCallbackClosure>,
 }
 
 impl Scheduler {
@@ -80,8 +79,8 @@ impl Scheduler {
             console::log_1(&format!("running event {event}").into());
 
             // Find element matching id
-            if let Some(ComponentEntry { component, .. }) = self.components.get_mut(event) {
-                component.handle_event();
+            if let Some(controller) = self.components.get_mut(event) {
+                controller.handle_event();
             }
         }
 
@@ -105,32 +104,8 @@ impl Scheduler {
             })
         });
 
-        for ComponentEntry { component, element } in self.components.iter_mut() {
-            if let Some((node, listener_map)) = component.render() {
-                // Convert node to Element
-                let el = node.build(&self.document)?;
-
-                // Apply required event listeners
-                for listener in listener_map {
-                    el.add_event_listener_with_callback(
-                        &listener.event_type,
-                        callback.as_ref().unchecked_ref(),
-                    )?;
-                }
-
-                // Add to the DOM
-                if let Some(element) = element.take() {
-                    // Update an existing element
-                    element.replace_with_with_node_1(&el)?;
-                } else {
-                    // Create a new element in the DOM
-                    let body = self.document.body().expect("body to exist");
-                    body.append_child(&el)?;
-                }
-
-                // Save the newly created element for future reference
-                *element = Some(el);
-            }
+        for controller in self.components.iter_mut() {
+            controller.render(callback)?;
         }
 
         Ok(())
@@ -144,10 +119,8 @@ impl Scheduler {
 
     pub fn add_component(&mut self, component: Box<dyn Component>) -> usize {
         let id = self.components.len();
-        self.components.push(ComponentEntry {
-            component,
-            element: None,
-        });
+        self.components
+            .push(ComponentController::new(component, &self.document));
         id
     }
 }
