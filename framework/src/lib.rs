@@ -1,10 +1,12 @@
 mod component;
-mod counter;
 mod dom;
 mod scheduler;
 
+mod counter;
+mod simple;
+
+use component::ComponentControllerRef;
 use counter::Counter;
-use scheduler::Scheduler;
 
 use wasm_bindgen::prelude::*;
 use web_sys::window;
@@ -13,14 +15,11 @@ use web_sys::window;
 pub fn main() -> Result<(), JsValue> {
     let window = window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
+    let body = document.body().expect("body to exist");
 
-    let scheduler_rc = Scheduler::new_with_ref(document);
+    let c = ComponentControllerRef::new(Counter::new(), &document, body.into());
 
-    let mut scheduler = scheduler_rc.borrow_mut();
-    scheduler.add_component(Counter::new());
-    scheduler.add_component(Counter::new());
-
-    scheduler.run();
+    c.render()?;
 
     Ok(())
 }

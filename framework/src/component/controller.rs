@@ -11,11 +11,11 @@ pub struct ComponentController {
     /// The component to be rendered
     component: Rc<RefCell<dyn Component>>,
 
+    parent: Element,
+    mounted_elements: Option<Vec<Element>>,
+
     /// A reference to the document in order to create elements
     document: Document,
-    /// References to already rendered elements on the page, useful for updating in place, rather
-    /// than completely re-rendering.
-    elements: Rc<RefCell<HashMap<usize, Element>>>,
 
     callbacks: Rc<RefCell<HashMap<(usize, EventType), Function>>>,
 }
@@ -24,69 +24,71 @@ pub struct ComponentController {
 pub struct ComponentControllerRef(Rc<RefCell<ComponentController>>);
 
 impl ComponentControllerRef {
-    pub fn new<C>(component: C, document: &Document) -> Self
+    pub fn new<C>(component: C, document: &Document, parent: Element) -> Self
     where
         C: Component + 'static,
     {
         Self(Rc::new(RefCell::new(ComponentController {
             component: Rc::new(RefCell::new(component)),
+            parent,
+            mounted_elements: None,
             document: document.clone(),
-            elements: Rc::new(RefCell::new(HashMap::new())),
             callbacks: Rc::new(RefCell::new(HashMap::new())),
         })))
     }
 
     pub fn render(&self) -> Result<(), JsValue> {
-        let controller = self.0.borrow();
+        let mut controller = self.0.borrow_mut();
 
-        for (id, node) in controller
-            .component
-            .borrow()
-            .render()
-            .into_iter()
-            .enumerate()
-        {
-            // Convert node to Element
-            let el = node.build(&controller.document, &|id, event_type| {
-                let mut callbacks = controller.callbacks.borrow_mut();
+        // Build elements
+        let elements = {
+            let component = controller.component.borrow();
+            component
+                .render()
+                .into_iter()
+                .map(|node| {
+                    // Convert node to Element
+                    node.build(&controller.document, &|id, event_type| {
+                        let mut callbacks = controller.callbacks.borrow_mut();
 
-                // Cache the closures so they can be re-used
-                callbacks
-                    .entry((id, event_type))
-                    .or_insert_with(|| {
-                        // Create a closure to bind with JS for this specific handler
-                        Closure::<dyn Fn(Event)>::new({
-                            let component = Rc::clone(&controller.component);
-                            let controller = self.clone();
+                        // Cache the closures so they can be re-used
+                        callbacks
+                            .entry((id, event_type))
+                            .or_insert_with(|| {
+                                // Create a closure to bind with JS for this specific handler
+                                Closure::<dyn Fn(Event)>::new({
+                                    let component = Rc::clone(&controller.component);
+                                    let controller = self.clone();
 
-                            move |event: Event| {
-                                component.borrow_mut().handle_event(id, event_type, event);
+                                    move |event: Event| {
+                                        component.borrow_mut().handle_event(id, event_type, event);
 
-                                // Trigger component re-render
-                                controller.render().expect("render to succeed");
-                            }
-                        })
-                        .into_js_value()
-                        .unchecked_into()
+                                        // Trigger component re-render
+                                        controller.render().expect("render to succeed");
+                                    }
+                                })
+                                .into_js_value()
+                                .unchecked_into()
+                            })
+                            .clone()
                     })
-                    .clone()
-            })?;
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        };
 
-            let mut elements = controller.elements.borrow_mut();
-
-            // Add to the DOM
-            if let Some(element) = elements.get(&id) {
-                // Update an existing element
-                element.replace_with_with_node_1(&el)?;
-            } else {
-                // Create a new element in the DOM
-                let body = controller.document.body().expect("body to exist");
-                body.append_child(&el)?;
+        // Work out how to mount elements
+        if let Some(mounted_elements) = controller.mounted_elements.as_ref() {
+            // Replace with existin elements
+            for (el, target) in elements.iter().zip(mounted_elements) {
+                target.replace_with_with_node_1(el)?;
             }
-
-            // Save the newly created element for future reference
-            elements.insert(id, el);
+        } else {
+            for el in elements.iter() {
+                controller.parent.append_child(el)?;
+            }
         }
+
+        controller.mounted_elements = Some(elements);
 
         Ok(())
     }

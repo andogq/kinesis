@@ -78,7 +78,7 @@ impl Scheduler {
     where
         C: Component + 'static,
     {
-        self.components
-            .push(ComponentControllerRef::new(component, &self.document));
+        // self.components
+        //     .push(ComponentControllerRef::new(component, &self.document));
     }
 }
