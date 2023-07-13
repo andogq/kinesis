@@ -1,5 +1,5 @@
 use crate::{
-    component::{Component, EventListener, EventType},
+    component::{Component, EventType},
     dom::DomNode,
 };
 
@@ -18,13 +18,13 @@ impl Component for Counter {
         self.count += 1;
     }
 
-    fn render(&self) -> Option<(Vec<DomNode>, Vec<EventListener>)> {
-        Some((
-            vec![
-                DomNode::p().text_content(&format!("The current count is {}", self.count)),
-                DomNode::button().text_content("Click me!"),
-            ],
-            vec![EventListener::new(1, EventType::Click)],
-        ))
+    fn render(&self) -> Vec<DomNode> {
+        vec![DomNode::div(0)
+            .child(DomNode::p(1).text_content(&format!("The current count is {}", self.count)))
+            .child(
+                DomNode::button(2)
+                    .text_content("Click me!")
+                    .listen(EventType::Click),
+            )]
     }
 }

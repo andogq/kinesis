@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::VecDeque, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsValue;
 use web_sys::Document;
 
@@ -78,8 +78,7 @@ impl Scheduler {
     where
         C: Component + 'static,
     {
-        let id = self.components.len();
         self.components
-            .push(ComponentControllerRef::new(id, component, &self.document));
+            .push(ComponentControllerRef::new(component, &self.document));
     }
 }
