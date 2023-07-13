@@ -1,81 +1,94 @@
-use std::{
-    collections::HashMap,
-    ops::{Deref, DerefMut},
-};
-
-use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{Document, Element};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
+use web_sys::{console, Document, Element, Event};
 
 use super::Component;
-use crate::scheduler::EventCallbackClosure;
 
 /// Wrapper around a component, used to provide additional functionality and assist with rendering
 /// the component to the DOM.
-pub struct ComponentController<C> {
+pub struct ComponentController {
     /// The ID of this component (unique within its siblings)
     component_id: usize,
     /// The component to be rendered
-    component: C,
+    component: Box<dyn Component>,
 
     /// A reference to the document in order to create elements
     document: Document,
     /// References to already rendered elements on the page, useful for updating in place, rather
     /// than completely re-rendering.
     elements: HashMap<usize, Element>,
+
+    callbacks: Vec<Closure<dyn Fn(Event)>>,
 }
 
-impl<C> ComponentController<C>
-where
-    // Really not sure about this :(
-    C: DerefMut,
-    C::Target: Component,
-{
-    pub fn new(component_id: usize, component: C, document: &Document) -> Self {
-        Self {
+pub struct ComponentControllerRef(Rc<RefCell<ComponentController>>);
+
+impl ComponentControllerRef {
+    pub fn new<C>(component_id: usize, component: C, document: &Document) -> Self
+    where
+        C: Component + 'static,
+    {
+        Self(Rc::new(RefCell::new(ComponentController {
             component_id,
-            component,
+            component: Box::new(component),
             document: document.clone(),
             elements: HashMap::new(),
-        }
+            callbacks: Vec::new(),
+        })))
     }
 
-    pub fn render(&mut self, event_callback_closure: &EventCallbackClosure) -> Result<(), JsValue> {
-        if let Some((nodes, listener_map)) = self.component.render() {
+    pub fn render(&self) -> Result<(), JsValue> {
+        let mut controller = self.0.borrow_mut();
+
+        if let Some((nodes, listener_map)) = {
+            // Perform render within scope to ensure that mutable reference to component is dropped
+            controller.component.render()
+        } {
             for (id, node) in nodes.into_iter().enumerate() {
                 // Convert node to Element
-                let el = node.build(&self.document)?;
-
-                // Save the ID on the element
-                let full_id = [self.component_id, id]
-                    .into_iter()
-                    .map(|n| n.to_string())
-                    .collect::<Vec<_>>()
-                    .join(".");
-                el.set_attribute("data-element-id", &full_id)?;
+                let el = node.build(&controller.document)?;
 
                 // Apply required event listeners
                 listener_map
                     .iter()
                     .filter(|listener| listener.element_path[0] == id)
-                    .try_for_each(|listener| {
+                    .try_for_each(|listener| -> Result<(), JsValue> {
+                        // TODO: If individual closures are to be created for each component, an
+                        // Rc<RefCell> will be  required to lock access to the components                        el.add_event_listener_with_callback(
+                        // Create a closure to bind with JS for this specific handler
+                        let controller_rc = self.clone();
+                        let callback = Closure::<dyn Fn(_)>::new(move |_event: Event| {
+                            // TODO: Pass correct event type to handler
+                            controller_rc.0.borrow_mut().component.handle_event();
+
+                            // Trigger re-render of component
+                            controller_rc.render().expect("render to succeed");
+                        });
+
+                        // Bind callback to element
                         el.add_event_listener_with_callback(
-                            &listener.event_type,
-                            event_callback_closure.as_ref().unchecked_ref(),
-                        )
+                            &String::from(listener.event_type),
+                            callback.as_ref().unchecked_ref(),
+                        )?;
+
+                        // Save callback so that closure doesn't get freed
+                        controller.callbacks.push(callback);
+
+                        Ok(())
                     })?;
 
                 // Add to the DOM
-                if let Some(element) = self.elements.get(&id) {
+                if let Some(element) = controller.elements.get(&id) {
                     // Update an existing element
                     element.replace_with_with_node_1(&el)?;
                 } else {
                     // Create a new element in the DOM
-                    let body = self.document.body().expect("body to exist");
+                    let body = controller.document.body().expect("body to exist");
                     body.append_child(&el)?;
                 }
 
                 // Save the newly created element for future reference
-                self.elements.insert(id, el);
+                controller.elements.insert(id, el);
             }
         }
 
@@ -83,16 +96,8 @@ where
     }
 }
 
-impl<C> Deref for ComponentController<C> {
-    type Target = C;
-
-    fn deref(&self) -> &Self::Target {
-        &self.component
-    }
-}
-
-impl<C> DerefMut for ComponentController<C> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.component
+impl Clone for ComponentControllerRef {
+    fn clone(&self) -> Self {
+        Self(Rc::clone(&self.0))
     }
 }

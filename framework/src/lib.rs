@@ -17,8 +17,8 @@ pub fn main() -> Result<(), JsValue> {
     let scheduler_rc = Scheduler::new_with_ref(document);
 
     let mut scheduler = scheduler_rc.borrow_mut();
-    scheduler.add_component(Box::new(Counter::new()));
-    scheduler.add_component(Box::new(Counter::new()));
+    scheduler.add_component(Counter::new());
+    scheduler.add_component(Counter::new());
 
     scheduler.run();
 

@@ -1,19 +1,33 @@
 mod controller;
-pub use controller::ComponentController;
+pub use controller::ComponentControllerRef;
 
 use std::collections::VecDeque;
 
 use crate::dom::DomNode;
 
+#[derive(Debug, Clone, Copy)]
+pub enum EventType {
+    Click,
+}
+impl From<EventType> for String {
+    fn from(event: EventType) -> Self {
+        use EventType::*;
+        match event {
+            Click => "click",
+        }
+        .to_string()
+    }
+}
+
 pub struct EventListener {
     pub element_path: VecDeque<usize>,
-    pub event_type: String,
+    pub event_type: EventType,
 }
 impl EventListener {
-    pub fn new(el_id: usize, event_type: &str) -> Self {
+    pub fn new(el_id: usize, event_type: EventType) -> Self {
         Self {
             element_path: VecDeque::from_iter([el_id]),
-            event_type: event_type.to_string(),
+            event_type,
         }
     }
 

@@ -1,15 +1,11 @@
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
-use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
-use web_sys::{console, Document, Event, HtmlElement};
+use wasm_bindgen::JsValue;
+use web_sys::Document;
 
-use crate::component::{Component, ComponentController};
+use crate::component::{Component, ComponentControllerRef};
 
 /// Helper type for [Scheduler] for berevity.
 pub type SchedulerRef = Rc<RefCell<Scheduler>>;
-
-/// Closure type that is used to handle DOM events, and trigger relevant events within the
-/// scheduler.
-pub type EventCallbackClosure = Closure<dyn Fn(Event)>;
 
 /// Main scheduler of the framework. Queues and executes events, and is the owner of any
 /// [components](Component) used within the framework. Depending on events that are generated, it
@@ -29,15 +25,9 @@ pub struct Scheduler {
     /// until they are exhausted, causing the scheduler to stop once again. This allows for easy
     /// tracking of whether the scheduler should be started again.
     running: bool,
-    /// Queue of events to execute. [VecDeque] allows for events to be executed in the order they
-    /// are pushed onto the queue (by popping them off).
-    events: VecDeque<usize>,
     /// Location of all of the components within the application, providing the scheduler with
     /// unrestricted access to them without mutability or ownership concerns.
-    components: Vec<ComponentController<Box<dyn Component>>>,
-
-    /// Used to cache a universal callback for DOM events
-    cached_callback: Option<EventCallbackClosure>,
+    components: Vec<ComponentControllerRef>,
 }
 
 impl Scheduler {
@@ -49,9 +39,7 @@ impl Scheduler {
             self_ref: None,
             document,
             running: false,
-            events: VecDeque::new(),
             components: Vec::new(),
-            cached_callback: None,
         }
     }
 
@@ -72,15 +60,6 @@ impl Scheduler {
             return;
         }
 
-        while let Some(event) = self.events.pop_front() {
-            console::log_1(&format!("running event {event}").into());
-
-            // Find element matching id
-            if let Some(controller) = self.components.get_mut(event) {
-                controller.handle_event();
-            }
-        }
-
         // Rerender the page
         self.render().unwrap();
 
@@ -88,54 +67,19 @@ impl Scheduler {
     }
 
     pub fn render(&mut self) -> Result<(), JsValue> {
-        let callback = self.cached_callback.get_or_insert({
-            // Create the callback, save it, and use it
-            // WARN: This will only work for MouseEvents, need to extend to work for any kind of
-            // event
-            let scheduler = Rc::clone(self.self_ref.as_ref().expect("to have self ref"));
-
-            Closure::<dyn Fn(_)>::new(move |event: Event| {
-                // Trigger event within scheduler. When an event is received, the target is
-                // checked, and the ID is extracted from an attribute. This ID contains information
-                // about the component that the element belongs to, as well as the specific
-                // location of the element. This can be used to a) trigger the event on the
-                // relevant component, and b) allow the component controller to trigger the correct
-                // handler based off of the event listener in the markup.
-                let target = event
-                    .target()
-                    .expect("event to have target")
-                    .dyn_into::<HtmlElement>()
-                    .expect("to be an element");
-                let id = target
-                    .dataset()
-                    .get("elementId")
-                    .expect("`data-element-id` attribute to exist")
-                    .split('.')
-                    .map(|n| n.parse::<usize>())
-                    .collect::<Result<Vec<_>, _>>()
-                    .expect("valid usize id stored in attribute");
-
-                // TODO: Emit rest of ID with event
-                scheduler.borrow_mut().add_event(id[0]);
-            })
-        });
-
         for controller in self.components.iter_mut() {
-            controller.render(callback)?;
+            controller.render()?;
         }
 
         Ok(())
     }
 
-    pub fn add_event(&mut self, event: usize) {
-        self.events.push_back(event);
-
-        self.run();
-    }
-
-    pub fn add_component(&mut self, component: Box<dyn Component>) {
+    pub fn add_component<C>(&mut self, component: C)
+    where
+        C: Component + 'static,
+    {
         let id = self.components.len();
         self.components
-            .push(ComponentController::new(id, component, &self.document));
+            .push(ComponentControllerRef::new(id, component, &self.document));
     }
 }
