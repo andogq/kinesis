@@ -59,9 +59,8 @@ impl ComponentControllerRef {
                             let component = Rc::clone(&controller.component);
                             let controller = self.clone();
 
-                            move |_event: Event| {
-                                // TODO: Handle event properly
-                                component.borrow_mut().handle_event();
+                            move |event: Event| {
+                                component.borrow_mut().handle_event(id, event_type, event);
 
                                 // Trigger component re-render
                                 controller.render().expect("render to succeed");

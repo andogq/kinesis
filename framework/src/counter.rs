@@ -1,3 +1,5 @@
+use web_sys::Event;
+
 use crate::{
     component::{Component, EventType},
     dom::DomNode,
@@ -14,8 +16,12 @@ impl Counter {
 }
 
 impl Component for Counter {
-    fn handle_event(&mut self) {
-        self.count += 1;
+    fn handle_event(&mut self, id: usize, event_type: EventType, _event: Event) {
+        match (id, event_type) {
+            (2, EventType::Click) => self.count -= 1,
+            (3, EventType::Click) => self.count += 1,
+            _ => (),
+        }
     }
 
     fn render(&self) -> Vec<DomNode> {
@@ -23,7 +29,12 @@ impl Component for Counter {
             .child(DomNode::p(1).text_content(&format!("The current count is {}", self.count)))
             .child(
                 DomNode::button(2)
-                    .text_content("Click me!")
+                    .text_content("Decrease")
+                    .listen(EventType::Click),
+            )
+            .child(
+                DomNode::button(3)
+                    .text_content("Increase")
                     .listen(EventType::Click),
             )]
     }

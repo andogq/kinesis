@@ -1,5 +1,6 @@
 mod controller;
 pub use controller::ComponentControllerRef;
+use web_sys::Event;
 
 use crate::dom::DomNode;
 
@@ -20,7 +21,7 @@ impl From<EventType> for String {
 /// Trait that represents a renderable component
 pub trait Component {
     /// Handle an incomming event, allowing for mutation of the component's state.
-    fn handle_event(&mut self);
+    fn handle_event(&mut self, id: usize, event_type: EventType, event: Event);
 
     /// Renders the component for a given state. Can optionally not render anything.
     fn render(&self) -> Vec<DomNode>;
