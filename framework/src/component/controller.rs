@@ -1,7 +1,11 @@
 use js_sys::Function;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, VecDeque},
+    rc::Rc,
+};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
-use web_sys::{Document, Element, Event};
+use web_sys::{console, Document, Element, Event};
 
 use super::{Component, EventType};
 
@@ -40,55 +44,71 @@ impl ComponentControllerRef {
     pub fn render(&self) -> Result<(), JsValue> {
         let mut controller = self.0.borrow_mut();
 
-        // Build elements
-        let elements = {
-            let component = controller.component.borrow();
-            component
+        // Take the mounted elements, so they can be passed into the DOM node render
+        let first_render = controller.mounted_elements.is_none();
+        let mut mounted_elements = controller.mounted_elements.take().into_iter().flatten();
+
+        // Queue of elements to render (children will be pushed in same order)
+        let mut element_queue = VecDeque::from_iter(
+            controller
+                .component
+                .borrow()
                 .render()
                 .into_iter()
-                .map(|node| {
-                    // Convert node to Element
-                    node.build(&controller.document, &|id, event_type| {
-                        let mut callbacks = controller.callbacks.borrow_mut();
+                .map(|node| (node, controller.parent.clone())),
+        );
 
-                        // Cache the closures so they can be re-used
-                        callbacks
-                            .entry((id, event_type))
-                            .or_insert_with(|| {
-                                // Create a closure to bind with JS for this specific handler
-                                Closure::<dyn Fn(Event)>::new({
-                                    let component = Rc::clone(&controller.component);
-                                    let controller = self.clone();
+        while let Some((node, parent)) = element_queue.pop_front() {
+            // Convert node to Element
+            let (node_element, children) = node.build(
+                &controller.document,
+                controller.component.borrow().get_counter_temp(),
+                mounted_elements.next(),
+                &|id, event_type| {
+                    let mut callbacks = controller.callbacks.borrow_mut();
 
-                                    move |event: Event| {
-                                        component.borrow_mut().handle_event(id, event_type, event);
+                    // Cache the closures so they can be re-used
+                    callbacks
+                        .entry((id, event_type))
+                        .or_insert_with(|| {
+                            // Create a closure to bind with JS for this specific handler
+                            Closure::<dyn Fn(Event)>::new({
+                                let component = Rc::clone(&controller.component);
+                                let controller = self.clone();
 
-                                        // Trigger component re-render
-                                        controller.render().expect("render to succeed");
-                                    }
-                                })
-                                .into_js_value()
-                                .unchecked_into()
+                                move |event: Event| {
+                                    component.borrow_mut().handle_event(id, event_type, event);
+
+                                    // Trigger component re-render
+                                    controller.render().expect("render to succeed");
+                                }
                             })
-                            .clone()
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?
-        };
+                            .into_js_value()
+                            .unchecked_into()
+                        })
+                        .clone()
+                },
+            )?;
 
-        // Work out how to mount elements
-        if let Some(mounted_elements) = controller.mounted_elements.as_ref() {
-            // Replace with existin elements
-            for (el, target) in elements.iter().zip(mounted_elements) {
-                target.replace_with_with_node_1(el)?;
+            if first_render {
+                parent.append_child(&node_element)?;
             }
-        } else {
-            for el in elements.iter() {
-                controller.parent.append_child(el)?;
+
+            if let Some(children) = children {
+                // Add the children to the render queue
+                element_queue.extend(
+                    children
+                        .into_iter()
+                        .map(|child| (child, node_element.clone())),
+                );
             }
+
+            // Save the mounted element for this node
+            controller
+                .mounted_elements
+                .get_or_insert(Vec::new())
+                .push(node_element);
         }
-
-        controller.mounted_elements = Some(elements);
 
         Ok(())
     }
