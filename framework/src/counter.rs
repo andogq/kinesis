@@ -7,11 +7,15 @@ use crate::{
 
 pub struct Counter {
     count: isize,
+    only_up: usize,
 }
 
 impl Counter {
     pub fn new() -> Self {
-        Self { count: 0 }
+        Self {
+            count: 0,
+            only_up: 0,
+        }
     }
 }
 
@@ -23,37 +27,46 @@ impl Component for Counter {
         _event: Event,
     ) -> Option<Vec<usize>> {
         match (id, event_type) {
-            (2, EventType::Click) => {
+            (3, EventType::Click) => {
                 self.count -= 1;
                 Some(vec![0])
             }
-            (3, EventType::Click) => {
+            (4, EventType::Click) => {
                 self.count += 1;
-                Some(vec![0])
+                self.only_up += 1;
+                Some(vec![0, 1])
             }
             _ => None,
         }
     }
 
-    fn render(&self) -> Vec<DomNode> {
+    fn handle_update(&self, update_type: usize) -> Option<String> {
+        match update_type {
+            0 => Some(format!("The current count is {}", self.count)),
+            1 => Some(format!("Only up is {}", self.only_up)),
+            _ => None,
+        }
+    }
+
+    fn render(&self) -> Vec<DomNode<usize>> {
         vec![DomNode::div(0)
             .child(DomNode::p(1).text_content(Content::Dynamic {
                 dependencies: vec![0],
-                render: Box::new(|count| format!("The current count is {}", count)),
+                update_type: 0,
+            }))
+            .child(DomNode::p(2).text_content(Content::Dynamic {
+                dependencies: vec![1],
+                update_type: 1,
             }))
             .child(
-                DomNode::button(2)
+                DomNode::button(3)
                     .text_content(Content::Static("Decrease".to_string()))
                     .listen(EventType::Click),
             )
             .child(
-                DomNode::button(3)
+                DomNode::button(4)
                     .text_content(Content::Static("Increase".to_string()))
                     .listen(EventType::Click),
             )]
-    }
-
-    fn get_counter_temp(&self) -> isize {
-        self.count
     }
 }

@@ -28,8 +28,8 @@ pub trait Component {
         event: Event,
     ) -> Option<Vec<usize>>;
 
-    /// Renders the component for a given state. Can optionally not render anything.
-    fn render(&self) -> Vec<DomNode>;
+    fn handle_update(&self, update_type: usize) -> Option<String>;
 
-    fn get_counter_temp(&self) -> isize;
+    /// Renders the component for a given state. Can optionally not render anything.
+    fn render(&self) -> Vec<DomNode<usize>>;
 }

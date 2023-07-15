@@ -62,7 +62,6 @@ impl ComponentControllerRef {
             // Convert node to Element
             let (node_element, children) = node.build(
                 &controller.document,
-                controller.component.borrow().get_counter_temp(),
                 mounted_elements.next(),
                 &|id, event_type| {
                     let mut callbacks = controller.callbacks.borrow_mut();
@@ -87,6 +86,12 @@ impl ComponentControllerRef {
                             .unchecked_into()
                         })
                         .clone()
+                },
+                &|update_type| {
+                    console::log_1(&format!("Update type {update_type} requested").into());
+                    let component = Rc::clone(&controller.component);
+                    let component = component.borrow();
+                    component.handle_update(update_type)
                 },
             )?;
 

@@ -2,7 +2,7 @@ use js_sys::Function;
 use wasm_bindgen::JsValue;
 use web_sys::{console, Document, Element};
 
-use crate::component::EventType;
+use crate::component::{Component, EventType};
 
 #[derive(Clone, Copy)]
 pub enum DomNodeKind {
@@ -29,8 +29,8 @@ impl From<DomNodeKind> for &str {
     }
 }
 
-pub enum Content<T> {
-    Static(T),
+pub enum Content<UpdateType> {
+    Static(String),
     Dynamic {
         /// List of values that this content relies on to render. Indexes based off of the order
         /// they are defined on the component struct.
@@ -39,28 +39,28 @@ pub enum Content<T> {
         /// A handler that will be passed a list of dependencies, and will render the content
         /// appropriately.
         // TODO: Handler should take referenced to changed values, which will be dynamic
-        render: Box<dyn Fn(&isize) -> T>,
+        update_type: UpdateType,
     },
 }
 
-pub enum NodeContent {
-    Text(Content<String>),
-    Nodes(Vec<DomNode>),
+pub enum NodeContent<UpdateType> {
+    Text(Content<UpdateType>),
+    Nodes(Vec<DomNode<UpdateType>>),
 }
 
-#[derive(Default)]
-pub struct DomNode {
+pub struct DomNode<UpdateType> {
     id: usize,
     kind: DomNodeKind,
-    content: Option<NodeContent>,
+    content: Option<NodeContent<UpdateType>>,
     listeners: Vec<EventType>,
 }
-impl DomNode {
+impl<UpdateType> DomNode<UpdateType> {
     pub fn p(id: usize) -> Self {
         Self {
             id,
             kind: DomNodeKind::P,
-            ..Default::default()
+            content: None,
+            listeners: Vec::new(),
         }
     }
 
@@ -68,7 +68,8 @@ impl DomNode {
         Self {
             id,
             kind: DomNodeKind::Button,
-            ..Default::default()
+            content: None,
+            listeners: Vec::new(),
         }
     }
 
@@ -76,21 +77,22 @@ impl DomNode {
         Self {
             id,
             kind: DomNodeKind::Div,
-            ..Default::default()
+            content: None,
+            listeners: Vec::new(),
         }
     }
 
-    pub fn text_content(mut self, content: Content<String>) -> Self {
+    pub fn text_content(mut self, content: Content<UpdateType>) -> Self {
         self.content = Some(NodeContent::Text(content));
         self
     }
 
-    pub fn children(mut self, children: Vec<DomNode>) -> Self {
+    pub fn children(mut self, children: Vec<DomNode<UpdateType>>) -> Self {
         self.content = Some(NodeContent::Nodes(children));
         self
     }
 
-    pub fn child(mut self, child: DomNode) -> Self {
+    pub fn child(mut self, child: DomNode<UpdateType>) -> Self {
         // Make sure that self.content is Some(NodeContent::Nodes(_))
         let children = if let NodeContent::Nodes(children) =
             self.content.get_or_insert(NodeContent::Nodes(Vec::new()))
@@ -111,15 +113,16 @@ impl DomNode {
     }
 
     /// Builds (or updates in place) the current node. Will not build children.
-    pub fn build<F>(
+    pub fn build<F, UpdateClosure>(
         self,
         document: &Document,
-        counter: isize,
         element: Option<Element>,
         get_closure: &F,
+        request_update: &UpdateClosure,
     ) -> Result<(Element, Option<Vec<Self>>), JsValue>
     where
         F: Fn(usize, EventType) -> Function,
+        UpdateClosure: Fn(UpdateType) -> Option<String>,
     {
         // If no existing element, create a new one
         let element = element.unwrap_or_else(|| {
@@ -133,19 +136,19 @@ impl DomNode {
             Some(NodeContent::Text(text_content)) => {
                 // TODO: (somehow) only change these things if their dependencies have altered
                 let text_content = match text_content {
-                    Content::Static(content) => content,
+                    Content::Static(content) => Some(content),
                     Content::Dynamic {
                         dependencies,
-                        render,
+                        update_type,
                     } => {
                         // TODO: Somehow extract actual args
-                        render(&counter)
+                        request_update(update_type)
                     }
                 };
 
-                console::log_1(&text_content.clone().into());
-
-                element.set_text_content(Some(text_content.as_str()));
+                if let Some(text_content) = text_content {
+                    element.set_text_content(Some(text_content.as_str()));
+                }
 
                 None
             }

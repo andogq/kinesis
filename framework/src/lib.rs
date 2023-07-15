@@ -3,7 +3,6 @@ mod dom;
 mod scheduler;
 
 mod counter;
-mod simple;
 
 use component::ComponentControllerRef;
 use counter::Counter;
