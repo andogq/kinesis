@@ -69,49 +69,47 @@ impl ComponentControllerRef {
             let get_callback_closure = &|id, event_type| {
                 let mut callbacks = controller.callbacks.borrow_mut();
 
+                // Prepare event handler closure incase it needs to be re-created
+                let event_closure = {
+                    let component = Rc::clone(&controller.component);
+                    let controller = self.clone();
+
+                    move |event: Event| {
+                        let changed = component.borrow_mut().handle_event(id, event_type, event);
+
+                        // Check if anything was actually changed in the event handler
+                        if let Some(changed) = changed {
+                            let component = component.borrow();
+                            let controller = controller.0.borrow();
+                            let dependency_registrations =
+                                controller.dependency_registrations.borrow();
+
+                            let mut debug_dep_counter = 0;
+
+                            for change in changed {
+                                for (update_type, callback) in
+                                    dependency_registrations.get(&change).into_iter().flatten()
+                                {
+                                    if let Some(content) = component.handle_update(*update_type) {
+                                        debug_dep_counter += 1;
+                                        callback(content);
+                                    }
+                                }
+                            }
+
+                            console::log_1(&format!("Updating {debug_dep_counter} deps").into());
+                        }
+                    }
+                };
+
                 // Cache the closures so they can be re-used
                 callbacks
                     .entry((id, event_type))
                     .or_insert_with(|| {
                         // Create a closure to bind with JS for this specific handler
-                        Closure::<dyn Fn(Event)>::new({
-                            let component = Rc::clone(&controller.component);
-                            let controller = self.clone();
-
-                            move |event: Event| {
-                                let changed =
-                                    component.borrow_mut().handle_event(id, event_type, event);
-
-                                // Check if anything was actually changed in the event handler
-                                if let Some(changed) = changed {
-                                    let component = component.borrow();
-                                    let controller = controller.0.borrow();
-                                    let dependency_registrations =
-                                        controller.dependency_registrations.borrow();
-
-                                    let mut dep_counter = 0;
-
-                                    for change in changed {
-                                        for (update_type, callback) in dependency_registrations
-                                            .get(&change)
-                                            .into_iter()
-                                            .flatten()
-                                        {
-                                            if let Some(content) =
-                                                component.handle_update(*update_type)
-                                            {
-                                                dep_counter += 1;
-                                                callback(content);
-                                            }
-                                        }
-                                    }
-
-                                    console::log_1(&format!("Updating {dep_counter} deps").into());
-                                }
-                            }
-                        })
-                        .into_js_value()
-                        .unchecked_into()
+                        Closure::<dyn Fn(Event)>::new(event_closure)
+                            .into_js_value()
+                            .unchecked_into()
                     })
                     .clone()
             };
