@@ -31,8 +31,13 @@ impl From<DomNodeKind> for &str {
     }
 }
 
-pub enum Content<UpdateType> {
+/// Represents the possible variations of text content within an element.
+pub enum TextContent<UpdateType> {
+    /// Static content that will not change. Does not contain any interpolated variables.
     Static(String),
+
+    /// Dynamic content that contains interpolated variables. Will be re-rendered when the
+    /// variables inside the content changes.
     Dynamic {
         /// List of values that this content relies on to render. Indexes based off of the order
         /// they are defined on the component struct.
@@ -44,20 +49,34 @@ pub enum Content<UpdateType> {
     },
 }
 
+/// Possible node content types within a DOM node.
 pub enum NodeContent<UpdateType> {
-    Text(Content<UpdateType>),
+    /// Text content, eg within `p` and `h1` elements.
+    Text(TextContent<UpdateType>),
+
+    /// Other nested nodes.
     Nodes(Vec<DomNode<UpdateType>>),
 }
 
+/// Generated representation of dynamic content within a component. Contains all of the required
+/// information to detect a changed dependency, and trigger a re-render.
 pub struct DynamicContent<UpdateType> {
     pub dependencies: Vec<usize>,
     pub update_type: UpdateType,
     pub callback: DependencyRegistrationCallback,
 }
 
+/// Information returned after a DOM node is build. Includes the element that it was rendered in,
+/// as well as any children (that will need to be rendered), and a list of dynamic content within
+/// the component.
 pub struct DomNodeBuildResult<UpdateType> {
+    /// Element that the node was rendered into.
     pub element: Element,
+
+    /// A list of children that will need to be rendered within the element.
     pub children: Option<Vec<DomNode<UpdateType>>>,
+
+    /// Any dynamic content that needs to be rendered within the component.
     pub dynamic_content: Vec<DynamicContent<UpdateType>>,
 }
 
@@ -98,7 +117,7 @@ where
         }
     }
 
-    pub fn text_content(mut self, content: Content<UpdateType>) -> Self {
+    pub fn text_content(mut self, content: TextContent<UpdateType>) -> Self {
         self.content = Some(NodeContent::Text(content));
         self
     }
@@ -151,10 +170,10 @@ where
         let children = match self.content {
             Some(NodeContent::Text(text_content)) => {
                 match text_content {
-                    Content::Static(content) => {
+                    TextContent::Static(content) => {
                         element.set_text_content(Some(content.as_str()));
                     }
-                    Content::Dynamic {
+                    TextContent::Dynamic {
                         dependencies,
                         update_type,
                     } => dynamic_content.push(DynamicContent {

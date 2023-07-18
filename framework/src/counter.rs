@@ -2,7 +2,7 @@ use web_sys::Event;
 
 use crate::{
     component::{Component, EventType},
-    dom::{Content, DomNode},
+    dom::{DomNode, TextContent},
 };
 
 pub struct Counter {
@@ -50,22 +50,22 @@ impl Component for Counter {
 
     fn render(&self) -> Vec<DomNode<usize>> {
         vec![DomNode::div(0)
-            .child(DomNode::p(1).text_content(Content::Dynamic {
+            .child(DomNode::p(1).text_content(TextContent::Dynamic {
                 dependencies: vec![0],
                 update_type: 0,
             }))
-            .child(DomNode::p(2).text_content(Content::Dynamic {
+            .child(DomNode::p(2).text_content(TextContent::Dynamic {
                 dependencies: vec![1],
                 update_type: 1,
             }))
             .child(
                 DomNode::button(3)
-                    .text_content(Content::Static("Decrease".to_string()))
+                    .text_content(TextContent::Static("Decrease".to_string()))
                     .listen(EventType::Click),
             )
             .child(
                 DomNode::button(4)
-                    .text_content(Content::Static("Increase".to_string()))
+                    .text_content(TextContent::Static("Increase".to_string()))
                     .listen(EventType::Click),
             )]
     }
