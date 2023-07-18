@@ -18,7 +18,7 @@ pub fn main() -> Result<(), JsValue> {
 
     let c = ComponentControllerRef::new(Counter::new(), &document, body.into());
 
-    c.render(None)?;
+    c.render()?;
 
     Ok(())
 }

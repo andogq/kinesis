@@ -4,7 +4,7 @@ use js_sys::Function;
 use wasm_bindgen::JsValue;
 use web_sys::{console, Document, Element};
 
-use crate::component::{Component, DependencyRegistrationCallback, EventType};
+use crate::component::{DependencyRegistrationCallback, EventType};
 
 #[derive(Clone, Copy)]
 pub enum DomNodeKind {
@@ -40,7 +40,6 @@ pub enum Content<UpdateType> {
 
         /// A handler that will be passed a list of dependencies, and will render the content
         /// appropriately.
-        // TODO: Handler should take referenced to changed values, which will be dynamic
         update_type: UpdateType,
     },
 }
@@ -48,6 +47,18 @@ pub enum Content<UpdateType> {
 pub enum NodeContent<UpdateType> {
     Text(Content<UpdateType>),
     Nodes(Vec<DomNode<UpdateType>>),
+}
+
+pub struct DynamicContent<UpdateType> {
+    pub dependencies: Vec<usize>,
+    pub update_type: UpdateType,
+    pub callback: DependencyRegistrationCallback,
+}
+
+pub struct DomNodeBuildResult<UpdateType> {
+    pub element: Element,
+    pub children: Option<Vec<DomNode<UpdateType>>>,
+    pub dynamic_content: Vec<DynamicContent<UpdateType>>,
 }
 
 pub struct DomNode<UpdateType> {
@@ -118,23 +129,14 @@ where
     }
 
     /// Builds (or updates in place) the current node. Will not build children.
-    pub fn build<F, UpdateClosure>(
+    pub fn build<F>(
         self,
         document: &Document,
         element: Option<Element>,
         get_closure: &F,
-        request_update: &UpdateClosure,
-    ) -> Result<
-        (
-            Element,
-            Option<Vec<Self>>,
-            Vec<(Vec<usize>, (UpdateType, DependencyRegistrationCallback))>,
-        ),
-        JsValue,
-    >
+    ) -> Result<DomNodeBuildResult<UpdateType>, JsValue>
     where
         F: Fn(usize, EventType) -> Function,
-        UpdateClosure: Fn(UpdateType) -> Option<String>,
     {
         // If no existing element, create a new one
         let element = element.unwrap_or_else(|| {
@@ -144,12 +146,10 @@ where
                 .expect("to be able to create element")
         });
 
-        let mut dynamic_content =
-            Vec::<(Vec<usize>, (UpdateType, DependencyRegistrationCallback))>::new();
+        let mut dynamic_content = Vec::<DynamicContent<UpdateType>>::new();
 
         let children = match self.content {
             Some(NodeContent::Text(text_content)) => {
-                // TODO: (somehow) only change these things if their dependencies have altered
                 match text_content {
                     Content::Static(content) => {
                         element.set_text_content(Some(content.as_str()));
@@ -157,22 +157,16 @@ where
                     Content::Dynamic {
                         dependencies,
                         update_type,
-                    } => {
-                        dynamic_content.push((
-                            dependencies,
-                            (update_type.clone(), {
-                                let element = element.clone();
-                                Rc::new(move |content| {
-                                    console::log_1(&format!("Adding content {content}").into());
-
-                                    element.set_text_content(Some(content.as_str()));
-                                })
-                            }),
-                        ));
-
-                        // TODO: Somehow extract actual args
-                        request_update(update_type);
-                    }
+                    } => dynamic_content.push(DynamicContent {
+                        dependencies,
+                        update_type,
+                        callback: {
+                            let element = element.clone();
+                            Rc::new(move |content| {
+                                element.set_text_content(Some(content.as_str()));
+                            })
+                        },
+                    }),
                 };
 
                 None
@@ -189,6 +183,10 @@ where
             )?;
         }
 
-        Ok((element, children, dynamic_content))
+        Ok(DomNodeBuildResult {
+            element,
+            children,
+            dynamic_content,
+        })
     }
 }

@@ -66,7 +66,7 @@ impl ComponentControllerRef {
         })))
     }
 
-    pub fn render(&self, changes: Option<Vec<usize>>) -> Result<(), JsValue> {
+    pub fn render(&self) -> Result<(), JsValue> {
         let mut controller = self.0.borrow_mut();
 
         // Take the mounted elements, so they can be passed into the DOM node render
@@ -102,12 +102,12 @@ impl ComponentControllerRef {
 
                                 // Check if anything was actually changed in the event handler
                                 if let Some(changed) = changed {
-                                    console::log_1(&"Re-checking dynamic dependencies".into());
-
                                     let component = component.borrow();
                                     let controller = controller.0.borrow();
                                     let dependency_registrations =
                                         controller.dependency_registrations.borrow();
+
+                                    let mut dep_counter = 0;
 
                                     for change in changed {
                                         for (update_type, callback) in dependency_registrations
@@ -118,13 +118,13 @@ impl ComponentControllerRef {
                                             if let Some(content) =
                                                 component.handle_update(*update_type)
                                             {
+                                                dep_counter += 1;
                                                 callback(content);
                                             }
                                         }
                                     }
 
-                                    // Trigger component re-render
-                                    // controller.render(changed).expect("render to succeed");
+                                    console::log_1(&format!("Updating {dep_counter} deps").into());
                                 }
                             }
                         })
@@ -134,32 +134,23 @@ impl ComponentControllerRef {
                     .clone()
             };
 
-            // Closure that will request an update for a certain reactive portion of the component
-            let request_update = &|update_type| {
-                console::log_1(&format!("Update type {update_type} requested").into());
-                let component = Rc::clone(&controller.component);
-                let component = component.borrow();
-                component.handle_update(update_type)
-            };
-
             // Build or update the element
-            let (node_element, children, dynamic_components) = node.build(
+            let build_result = node.build(
                 &controller.document,
                 mounted_elements.next(),
                 get_callback_closure,
-                request_update,
             )?;
 
             if first_render {
-                parent.append_child(&node_element)?;
+                parent.append_child(&build_result.element)?;
             }
 
-            if let Some(children) = children {
+            if let Some(children) = build_result.children {
                 // Add the children to the render queue
                 element_queue.extend(
                     children
                         .into_iter()
-                        .map(|child| (child, node_element.clone())),
+                        .map(|child| (child, build_result.element.clone())),
                 );
             }
 
@@ -167,20 +158,27 @@ impl ComponentControllerRef {
             controller
                 .mounted_elements
                 .get_or_insert(Vec::new())
-                .push(node_element);
+                .push(build_result.element);
 
-            console::log_1(&"Adding dependencies".into());
+            console::log_1(&"Running initial dependency render".into());
             let mut dependency_registrations = controller.dependency_registrations.borrow_mut();
             let component = controller.component.borrow();
-            for (dependencies, (update_type, callback)) in dynamic_components {
+
+            for dynamic_content in build_result.dynamic_content {
                 // Run action
-                if let Some(content) = component.handle_update(update_type) {
-                    callback(content);
+                if let Some(content) = component.handle_update(dynamic_content.update_type) {
+                    (dynamic_content.callback)(content);
                 }
 
                 // Save action
-                for dependency in dependencies {
-                    dependency_registrations.insert(dependency, (update_type, callback.clone()));
+                for dependency in dynamic_content.dependencies {
+                    dependency_registrations.insert(
+                        dependency,
+                        (
+                            dynamic_content.update_type,
+                            dynamic_content.callback.clone(),
+                        ),
+                    );
                 }
             }
         }
