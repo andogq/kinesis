@@ -2,31 +2,13 @@ use js_sys::Function;
 use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
-    hash::Hash,
     rc::Rc,
 };
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 use web_sys::{console, Document, Element, Event};
 
 use super::{Component, EventType};
-
-pub struct HashMapList<K, V>(HashMap<K, Vec<V>>);
-impl<K, V> HashMapList<K, V>
-where
-    K: Eq + PartialEq + Hash,
-{
-    pub fn new() -> Self {
-        Self(HashMap::new())
-    }
-
-    pub fn get(&self, k: &K) -> Option<&[V]> {
-        self.0.get(k).map(|v| v.as_slice())
-    }
-
-    pub fn insert(&mut self, k: K, v: V) {
-        self.0.entry(k).or_insert(Vec::new()).push(v);
-    }
-}
+use crate::util::HashMapList;
 
 pub type DependencyRegistrationCallback = Rc<dyn Fn(String)>;
 

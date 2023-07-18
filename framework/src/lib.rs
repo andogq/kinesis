@@ -1,6 +1,7 @@
 mod component;
 mod dom;
 mod scheduler;
+mod util;
 
 mod counter;
 
