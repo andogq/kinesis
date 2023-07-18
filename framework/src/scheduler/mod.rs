@@ -68,7 +68,7 @@ impl Scheduler {
 
     pub fn render(&mut self) -> Result<(), JsValue> {
         for controller in self.components.iter_mut() {
-            controller.render()?;
+            controller.render(None)?;
         }
 
         Ok(())

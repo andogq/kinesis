@@ -1,8 +1,10 @@
+use std::rc::Rc;
+
 use js_sys::Function;
 use wasm_bindgen::JsValue;
 use web_sys::{console, Document, Element};
 
-use crate::component::{Component, EventType};
+use crate::component::{Component, DependencyRegistrationCallback, EventType};
 
 #[derive(Clone, Copy)]
 pub enum DomNodeKind {
@@ -54,7 +56,10 @@ pub struct DomNode<UpdateType> {
     content: Option<NodeContent<UpdateType>>,
     listeners: Vec<EventType>,
 }
-impl<UpdateType> DomNode<UpdateType> {
+impl<UpdateType> DomNode<UpdateType>
+where
+    UpdateType: Clone,
+{
     pub fn p(id: usize) -> Self {
         Self {
             id,
@@ -119,7 +124,14 @@ impl<UpdateType> DomNode<UpdateType> {
         element: Option<Element>,
         get_closure: &F,
         request_update: &UpdateClosure,
-    ) -> Result<(Element, Option<Vec<Self>>), JsValue>
+    ) -> Result<
+        (
+            Element,
+            Option<Vec<Self>>,
+            Vec<(Vec<usize>, (UpdateType, DependencyRegistrationCallback))>,
+        ),
+        JsValue,
+    >
     where
         F: Fn(usize, EventType) -> Function,
         UpdateClosure: Fn(UpdateType) -> Option<String>,
@@ -132,23 +144,36 @@ impl<UpdateType> DomNode<UpdateType> {
                 .expect("to be able to create element")
         });
 
+        let mut dynamic_content =
+            Vec::<(Vec<usize>, (UpdateType, DependencyRegistrationCallback))>::new();
+
         let children = match self.content {
             Some(NodeContent::Text(text_content)) => {
                 // TODO: (somehow) only change these things if their dependencies have altered
-                let text_content = match text_content {
-                    Content::Static(content) => Some(content),
+                match text_content {
+                    Content::Static(content) => {
+                        element.set_text_content(Some(content.as_str()));
+                    }
                     Content::Dynamic {
                         dependencies,
                         update_type,
                     } => {
+                        dynamic_content.push((
+                            dependencies,
+                            (update_type.clone(), {
+                                let element = element.clone();
+                                Rc::new(move |content| {
+                                    console::log_1(&format!("Adding content {content}").into());
+
+                                    element.set_text_content(Some(content.as_str()));
+                                })
+                            }),
+                        ));
+
                         // TODO: Somehow extract actual args
-                        request_update(update_type)
+                        request_update(update_type);
                     }
                 };
-
-                if let Some(text_content) = text_content {
-                    element.set_text_content(Some(text_content.as_str()));
-                }
 
                 None
             }
@@ -164,6 +189,6 @@ impl<UpdateType> DomNode<UpdateType> {
             )?;
         }
 
-        Ok((element, children))
+        Ok((element, children, dynamic_content))
     }
 }

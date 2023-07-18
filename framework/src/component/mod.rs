@@ -1,5 +1,5 @@
 mod controller;
-pub use controller::ComponentControllerRef;
+pub use controller::*;
 use web_sys::Event;
 
 use crate::dom::DomNode;
