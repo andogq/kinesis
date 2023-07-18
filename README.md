@@ -53,6 +53,10 @@ impl CounterFull {
         - [ ] DOM elements
         - [ ] Other components
     - [ ] Optional children
+    - [ ] Portals
+    - [ ] Slots
+       - [ ] Single
+       - [ ] Named
  - [ ] State
     - [ ] Derived state
  - [ ] Scoped CSS support
