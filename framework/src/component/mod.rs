@@ -17,5 +17,5 @@ pub trait Component {
     fn handle_update(&self, update_type: usize) -> Option<String>;
 
     /// Renders the component for a given state. Can optionally not render anything.
-    fn render(&self) -> Vec<DomNode<usize>>;
+    fn render(&self) -> Vec<DomNode>;
 }

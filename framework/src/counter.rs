@@ -48,7 +48,7 @@ impl Component for Counter {
         }
     }
 
-    fn render(&self) -> Vec<DomNode<usize>> {
+    fn render(&self) -> Vec<DomNode> {
         vec![DomNode::div(0)
             .child(DomNode::p(1).text_content(TextContent::Dynamic {
                 dependencies: vec![0],

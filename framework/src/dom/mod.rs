@@ -35,7 +35,7 @@ impl From<DomNodeKind> for &str {
 }
 
 /// Represents the possible variations of text content within an element.
-pub enum TextContent<UpdateType> {
+pub enum TextContent {
     /// Static content that will not change. Does not contain any interpolated variables.
     Static(String),
 
@@ -48,51 +48,48 @@ pub enum TextContent<UpdateType> {
 
         /// A handler that will be passed a list of dependencies, and will render the content
         /// appropriately.
-        update_type: UpdateType,
+        update_type: usize,
     },
 }
 
 /// Possible node content types within a DOM node.
-pub enum NodeContent<UpdateType> {
+pub enum NodeContent {
     /// Text content, eg within `p` and `h1` elements.
-    Text(TextContent<UpdateType>),
+    Text(TextContent),
 
     /// Other nested nodes.
-    Nodes(Vec<DomNode<UpdateType>>),
+    Nodes(Vec<DomNode>),
 }
 
 /// Generated representation of dynamic content within a component. Contains all of the required
 /// information to detect a changed dependency, and trigger a re-render.
-pub struct DynamicContent<UpdateType> {
+pub struct DynamicContent {
     pub dependencies: Vec<usize>,
-    pub update_type: UpdateType,
+    pub update_type: usize,
     pub callback: DependencyRegistrationCallback,
 }
 
 /// Information returned after a DOM node is build. Includes the element that it was rendered in,
 /// as well as any children (that will need to be rendered), and a list of dynamic content within
 /// the component.
-pub struct DomNodeBuildResult<UpdateType> {
+pub struct DomNodeBuildResult {
     /// Element that the node was rendered into.
     pub element: Element,
 
     /// A list of children that will need to be rendered within the element.
-    pub children: Option<Vec<DomNode<UpdateType>>>,
+    pub children: Option<Vec<DomNode>>,
 
     /// Any dynamic content that needs to be rendered within the component.
-    pub dynamic_content: Vec<DynamicContent<UpdateType>>,
+    pub dynamic_content: Vec<DynamicContent>,
 }
 
-pub struct DomNode<UpdateType> {
+pub struct DomNode {
     id: usize,
     kind: DomNodeKind,
-    content: Option<NodeContent<UpdateType>>,
+    content: Option<NodeContent>,
     listeners: Vec<EventType>,
 }
-impl<UpdateType> DomNode<UpdateType>
-where
-    UpdateType: Clone,
-{
+impl DomNode {
     pub fn p(id: usize) -> Self {
         Self {
             id,
@@ -120,12 +117,12 @@ where
         }
     }
 
-    pub fn text_content(mut self, content: TextContent<UpdateType>) -> Self {
+    pub fn text_content(mut self, content: TextContent) -> Self {
         self.content = Some(NodeContent::Text(content));
         self
     }
 
-    pub fn child(mut self, child: DomNode<UpdateType>) -> Self {
+    pub fn child(mut self, child: DomNode) -> Self {
         // Make sure that self.content is Some(NodeContent::Nodes(_))
         let children = if let NodeContent::Nodes(children) =
             self.content.get_or_insert(NodeContent::Nodes(Vec::new()))
@@ -151,7 +148,7 @@ where
         document: &Document,
         element: Option<Element>,
         get_closure: &F,
-    ) -> Result<DomNodeBuildResult<UpdateType>, JsValue>
+    ) -> Result<DomNodeBuildResult, JsValue>
     where
         F: Fn(usize, EventType) -> Function,
     {
@@ -163,7 +160,7 @@ where
                 .expect("to be able to create element")
         });
 
-        let mut dynamic_content = Vec::<DynamicContent<UpdateType>>::new();
+        let mut dynamic_content = Vec::<DynamicContent>::new();
 
         let children = match self.content {
             Some(NodeContent::Text(text_content)) => {
