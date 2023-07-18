@@ -43,6 +43,30 @@ impl CounterFull {
 }
 ```
 
+# Todo
+
+ - [ ] DOM
+    - [ ] Nested components
+        - [ ] Props
+        - [ ] Bi-directional binding
+    - [ ] Arrays
+        - [ ] DOM elements
+        - [ ] Other components
+    - [ ] Optional children
+ - [ ] State
+    - [ ] Derived state
+ - [ ] Scoped CSS support
+ - [ ] Async/future support
+ - [ ] Long term stuff
+    - [ ] JS component interop
+       - Way to render regular JS components within Rust components
+       - Custom Elements?
+       - Pass an element handle to JS?
+    - [ ] Accompanying server framework
+       - [ ] SSR
+       - [ ] Routing
+       - [ ] ect...
+
 # Requirements
 
  - [ ] Macros
