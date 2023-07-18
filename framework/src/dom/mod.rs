@@ -122,11 +122,6 @@ where
         self
     }
 
-    pub fn children(mut self, children: Vec<DomNode<UpdateType>>) -> Self {
-        self.content = Some(NodeContent::Nodes(children));
-        self
-    }
-
     pub fn child(mut self, child: DomNode<UpdateType>) -> Self {
         // Make sure that self.content is Some(NodeContent::Nodes(_))
         let children = if let NodeContent::Nodes(children) =
