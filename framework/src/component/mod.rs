@@ -2,21 +2,7 @@ mod controller;
 pub use controller::*;
 use web_sys::Event;
 
-use crate::dom::DomNode;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum EventType {
-    Click,
-}
-impl From<EventType> for String {
-    fn from(event: EventType) -> Self {
-        use EventType::*;
-        match event {
-            Click => "click",
-        }
-        .to_string()
-    }
-}
+use crate::dom::{DomNode, EventType};
 
 /// Trait that represents a renderable component
 pub trait Component {

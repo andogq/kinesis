@@ -1,10 +1,13 @@
+mod event;
+
 use std::rc::Rc;
 
 use js_sys::Function;
 use wasm_bindgen::JsValue;
 use web_sys::{console, Document, Element};
 
-use crate::component::{DependencyRegistrationCallback, EventType};
+pub use self::event::EventType;
+use crate::component::DependencyRegistrationCallback;
 
 #[derive(Clone, Copy)]
 pub enum DomNodeKind {

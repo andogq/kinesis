@@ -1,8 +1,8 @@
 use web_sys::Event;
 
 use crate::{
-    component::{Component, EventType},
-    dom::{DomNode, TextContent},
+    component::Component,
+    dom::{DomNode, EventType, TextContent},
 };
 
 pub struct Counter {
