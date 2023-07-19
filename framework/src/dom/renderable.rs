@@ -40,3 +40,18 @@ pub trait Renderable {
         get_event_closure: &dyn Fn(usize, EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue>;
 }
+
+impl Renderable for Option<Box<dyn Renderable>> {
+    fn render(
+        mut self: Box<Self>,
+        document: &Document,
+        element: Option<Element>,
+        get_event_closure: &dyn Fn(usize, EventType) -> Function,
+    ) -> Result<Option<DomNodeBuildResult>, JsValue> {
+        if let Some(renderable) = self.take() {
+            renderable.render(document, element, get_event_closure)
+        } else {
+            Ok(None)
+        }
+    }
+}
