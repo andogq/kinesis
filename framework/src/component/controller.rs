@@ -152,13 +152,19 @@ impl ComponentControllerRef {
                 if let Some(children) = build_result.children {
                     let parent = build_result.element.unwrap_or(parent);
 
+                    let children = children
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, child)| (child, parent.clone(), identifier.child(index)));
+
                     // Add the children to the render queue
-                    element_queue.extend(
+                    if build_result.in_place {
                         children
-                            .into_iter()
-                            .enumerate()
-                            .map(|(index, child)| (child, parent.clone(), identifier.child(index))),
-                    );
+                            .rev()
+                            .for_each(|entry| element_queue.push_front(entry));
+                    } else {
+                        element_queue.extend(children);
+                    }
                 }
 
                 console::log_1(&"Running initial dependency render".into());

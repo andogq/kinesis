@@ -28,6 +28,9 @@ pub struct DomNodeBuildResult {
 
     /// Any dynamic content that needs to be rendered within the component.
     pub dynamic_content: Vec<DynamicContent>,
+
+    /// Indicates that the following result should be evaluated in place.
+    pub in_place: bool,
 }
 
 /// Represents anything that could be rednered in th eDOM
@@ -55,6 +58,7 @@ where
             element,
             children: Some(self.into_iter().collect()),
             dynamic_content: Vec::new(),
+            in_place: true,
         }))
     }
 }

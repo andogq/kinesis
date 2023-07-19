@@ -174,6 +174,7 @@ impl Renderable for DomNode {
             element: Some(element),
             children,
             dynamic_content,
+            in_place: false,
         }))
     }
 }
