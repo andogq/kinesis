@@ -69,10 +69,16 @@ impl Component for Counter {
                         .text_content(TextContent::Static("Increase".to_string()))
                         .listen(EventType::Click),
                 ))
-                .child(Box::new(false.then(|| {
+                .child(Box::new(true.then(|| {
                     Box::new(
                         DomNode::p(5)
                             .text_content(TextContent::Static("Temporary element".to_string())),
+                    ) as Box<dyn Renderable>
+                })))
+                .child(Box::new((0..5).map(|i| {
+                    Box::new(
+                        DomNode::p(6 + i)
+                            .text_content(TextContent::Static(format!("Array element {i}"))),
                     ) as Box<dyn Renderable>
                 }))),
         )]

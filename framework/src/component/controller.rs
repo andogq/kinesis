@@ -119,25 +119,26 @@ impl ComponentControllerRef {
                 mounted_elements.next(),
                 get_callback_closure,
             )? {
-                // Only perform render if a build result is returned
-                if first_render {
-                    parent.append_child(&build_result.element)?;
+                // Only perform render if a build result is returned and there's an element to
+                // render
+                if let Some(element) = &build_result.element {
+                    // Save the mounted element for this node
+                    controller
+                        .mounted_elements
+                        .get_or_insert(Vec::new())
+                        .push(element.clone());
+
+                    if first_render {
+                        parent.append_child(element)?;
+                    }
                 }
 
                 if let Some(children) = build_result.children {
-                    // Add the children to the render queue
-                    element_queue.extend(
-                        children
-                            .into_iter()
-                            .map(|child| (child, build_result.element.clone())),
-                    );
-                }
+                    let parent = build_result.element.unwrap_or(parent);
 
-                // Save the mounted element for this node
-                controller
-                    .mounted_elements
-                    .get_or_insert(Vec::new())
-                    .push(build_result.element);
+                    // Add the children to the render queue
+                    element_queue.extend(children.into_iter().map(|child| (child, parent.clone())));
+                }
 
                 console::log_1(&"Running initial dependency render".into());
                 let mut dependency_registrations = controller.dependency_registrations.borrow_mut();

@@ -175,7 +175,7 @@ impl Renderable for DomNode {
         }
 
         Ok(Some(DomNodeBuildResult {
-            element,
+            element: Some(element),
             children,
             dynamic_content,
         }))

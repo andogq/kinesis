@@ -21,7 +21,7 @@ pub struct DynamicContent {
 /// the component.
 pub struct DomNodeBuildResult {
     /// Element that the node was rendered into.
-    pub element: Element,
+    pub element: Option<Element>,
 
     /// A list of children that will need to be rendered within the element.
     pub children: Option<Vec<Box<dyn Renderable>>>,
@@ -41,17 +41,20 @@ pub trait Renderable {
     ) -> Result<Option<DomNodeBuildResult>, JsValue>;
 }
 
-impl Renderable for Option<Box<dyn Renderable>> {
+impl<I> Renderable for I
+where
+    I: IntoIterator<Item = Box<dyn Renderable>>,
+{
     fn render(
-        mut self: Box<Self>,
-        document: &Document,
+        self: Box<Self>,
+        _document: &Document,
         element: Option<Element>,
-        get_event_closure: &dyn Fn(usize, EventType) -> Function,
+        _get_event_closure: &dyn Fn(usize, EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
-        if let Some(renderable) = self.take() {
-            renderable.render(document, element, get_event_closure)
-        } else {
-            Ok(None)
-        }
+        Ok(Some(DomNodeBuildResult {
+            element,
+            children: Some(self.into_iter().collect()),
+            dynamic_content: Vec::new(),
+        }))
     }
 }
