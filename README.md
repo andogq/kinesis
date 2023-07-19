@@ -52,7 +52,8 @@ impl CounterFull {
     - [ ] Arrays
         - [ ] DOM elements
         - [ ] Other components
-    - [ ] Optional children
+    - [x] Optional children
+    - [ ] Dynamic children content
     - [ ] Portals
     - [ ] Slots
        - [ ] Single
