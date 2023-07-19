@@ -61,6 +61,10 @@ impl CounterFull {
     - [ ] Derived state
  - [ ] Scoped CSS support
  - [ ] Async/future support
+ - [ ] Error handling
+    - [ ] Make panics usable
+    - [ ] See if it's possible to setup `dbg`, `println`, ect to use console
+    - [ ] Use proper `Error` enums instead of `JsValue`
  - [ ] Long term stuff
     - [ ] JS component interop
        - Way to render regular JS components within Rust components

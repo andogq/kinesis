@@ -1,4 +1,5 @@
 mod event;
+pub mod renderable;
 
 use std::rc::Rc;
 
@@ -7,7 +8,7 @@ use wasm_bindgen::JsValue;
 use web_sys::{console, Document, Element};
 
 pub use self::event::EventType;
-use crate::component::DependencyRegistrationCallback;
+use self::renderable::{DomNodeBuildResult, DynamicContent, Renderable};
 
 #[derive(Clone, Copy)]
 pub enum DomNodeKind {
@@ -58,29 +59,7 @@ pub enum NodeContent {
     Text(TextContent),
 
     /// Other nested nodes.
-    Nodes(Vec<DomNode>),
-}
-
-/// Generated representation of dynamic content within a component. Contains all of the required
-/// information to detect a changed dependency, and trigger a re-render.
-pub struct DynamicContent {
-    pub dependencies: Vec<usize>,
-    pub update_type: usize,
-    pub callback: DependencyRegistrationCallback,
-}
-
-/// Information returned after a DOM node is build. Includes the element that it was rendered in,
-/// as well as any children (that will need to be rendered), and a list of dynamic content within
-/// the component.
-pub struct DomNodeBuildResult {
-    /// Element that the node was rendered into.
-    pub element: Element,
-
-    /// A list of children that will need to be rendered within the element.
-    pub children: Option<Vec<DomNode>>,
-
-    /// Any dynamic content that needs to be rendered within the component.
-    pub dynamic_content: Vec<DynamicContent>,
+    Nodes(Vec<Box<dyn Renderable>>),
 }
 
 pub struct DomNode {
@@ -122,7 +101,7 @@ impl DomNode {
         self
     }
 
-    pub fn child(mut self, child: DomNode) -> Self {
+    pub fn child(mut self, child: Box<dyn Renderable>) -> Self {
         // Make sure that self.content is Some(NodeContent::Nodes(_))
         let children = if let NodeContent::Nodes(children) =
             self.content.get_or_insert(NodeContent::Nodes(Vec::new()))
@@ -141,17 +120,15 @@ impl DomNode {
         self.listeners.push(event);
         self
     }
+}
 
-    /// Builds (or updates in place) the current node. Will not build children.
-    pub fn build<F>(
-        self,
+impl Renderable for DomNode {
+    fn render(
+        self: Box<Self>,
         document: &Document,
         element: Option<Element>,
-        get_closure: &F,
-    ) -> Result<DomNodeBuildResult, JsValue>
-    where
-        F: Fn(usize, EventType) -> Function,
-    {
+        get_event_closure: &dyn Fn(usize, EventType) -> Function,
+    ) -> Result<Option<DomNodeBuildResult>, JsValue> {
         // If no existing element, create a new one
         let element = element.unwrap_or_else(|| {
             console::log_1(&"creating element".into());
@@ -193,14 +170,14 @@ impl DomNode {
         for event in self.listeners {
             element.add_event_listener_with_callback(
                 &String::from(event),
-                &get_closure(self.id, event),
+                &get_event_closure(self.id, event),
             )?;
         }
 
-        Ok(DomNodeBuildResult {
+        Ok(Some(DomNodeBuildResult {
             element,
             children,
             dynamic_content,
-        })
+        }))
     }
 }

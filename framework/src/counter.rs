@@ -2,7 +2,7 @@ use web_sys::Event;
 
 use crate::{
     component::Component,
-    dom::{DomNode, EventType, TextContent},
+    dom::{renderable::Renderable, DomNode, EventType, TextContent},
 };
 
 pub struct Counter {
@@ -48,25 +48,27 @@ impl Component for Counter {
         }
     }
 
-    fn render(&self) -> Vec<DomNode> {
-        vec![DomNode::div(0)
-            .child(DomNode::p(1).text_content(TextContent::Dynamic {
-                dependencies: vec![0],
-                update_type: 0,
-            }))
-            .child(DomNode::p(2).text_content(TextContent::Dynamic {
-                dependencies: vec![1],
-                update_type: 1,
-            }))
-            .child(
-                DomNode::button(3)
-                    .text_content(TextContent::Static("Decrease".to_string()))
-                    .listen(EventType::Click),
-            )
-            .child(
-                DomNode::button(4)
-                    .text_content(TextContent::Static("Increase".to_string()))
-                    .listen(EventType::Click),
-            )]
+    fn render(&self) -> Vec<Box<dyn Renderable>> {
+        vec![Box::new(
+            DomNode::div(0)
+                .child(Box::new(DomNode::p(1).text_content(TextContent::Dynamic {
+                    dependencies: vec![0],
+                    update_type: 0,
+                })))
+                .child(Box::new(DomNode::p(2).text_content(TextContent::Dynamic {
+                    dependencies: vec![1],
+                    update_type: 1,
+                })))
+                .child(Box::new(
+                    DomNode::button(3)
+                        .text_content(TextContent::Static("Decrease".to_string()))
+                        .listen(EventType::Click),
+                ))
+                .child(Box::new(
+                    DomNode::button(4)
+                        .text_content(TextContent::Static("Increase".to_string()))
+                        .listen(EventType::Click),
+                )),
+        )]
     }
 }

@@ -8,9 +8,8 @@ use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 use web_sys::{console, Document, Element, Event};
 
 use super::{Component, EventType};
+use crate::dom::renderable::DependencyRegistrationCallback;
 use crate::util::HashMapList;
-
-pub type DependencyRegistrationCallback = Rc<dyn Fn(String)>;
 
 /// Wrapper around a component, used to provide additional functionality and assist with rendering
 /// the component to the DOM.
@@ -115,50 +114,51 @@ impl ComponentControllerRef {
             };
 
             // Build or update the element
-            let build_result = node.build(
+            if let Some(build_result) = node.render(
                 &controller.document,
                 mounted_elements.next(),
                 get_callback_closure,
-            )?;
-
-            if first_render {
-                parent.append_child(&build_result.element)?;
-            }
-
-            if let Some(children) = build_result.children {
-                // Add the children to the render queue
-                element_queue.extend(
-                    children
-                        .into_iter()
-                        .map(|child| (child, build_result.element.clone())),
-                );
-            }
-
-            // Save the mounted element for this node
-            controller
-                .mounted_elements
-                .get_or_insert(Vec::new())
-                .push(build_result.element);
-
-            console::log_1(&"Running initial dependency render".into());
-            let mut dependency_registrations = controller.dependency_registrations.borrow_mut();
-            let component = controller.component.borrow();
-
-            for dynamic_content in build_result.dynamic_content {
-                // Run action
-                if let Some(content) = component.handle_update(dynamic_content.update_type) {
-                    (dynamic_content.callback)(content);
+            )? {
+                // Only perform render if a build result is returned
+                if first_render {
+                    parent.append_child(&build_result.element)?;
                 }
 
-                // Save action
-                for dependency in dynamic_content.dependencies {
-                    dependency_registrations.insert(
-                        dependency,
-                        (
-                            dynamic_content.update_type,
-                            dynamic_content.callback.clone(),
-                        ),
+                if let Some(children) = build_result.children {
+                    // Add the children to the render queue
+                    element_queue.extend(
+                        children
+                            .into_iter()
+                            .map(|child| (child, build_result.element.clone())),
                     );
+                }
+
+                // Save the mounted element for this node
+                controller
+                    .mounted_elements
+                    .get_or_insert(Vec::new())
+                    .push(build_result.element);
+
+                console::log_1(&"Running initial dependency render".into());
+                let mut dependency_registrations = controller.dependency_registrations.borrow_mut();
+                let component = controller.component.borrow();
+
+                for dynamic_content in build_result.dynamic_content {
+                    // Run action
+                    if let Some(content) = component.handle_update(dynamic_content.update_type) {
+                        (dynamic_content.callback)(content);
+                    }
+
+                    // Save action
+                    for dependency in dynamic_content.dependencies {
+                        dependency_registrations.insert(
+                            dependency,
+                            (
+                                dynamic_content.update_type,
+                                dynamic_content.callback.clone(),
+                            ),
+                        );
+                    }
                 }
             }
         }

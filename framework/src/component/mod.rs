@@ -2,7 +2,7 @@ mod controller;
 pub use controller::*;
 use web_sys::Event;
 
-use crate::dom::{DomNode, EventType};
+use crate::dom::{renderable::Renderable, EventType};
 
 /// Trait that represents a renderable component
 pub trait Component {
@@ -17,5 +17,5 @@ pub trait Component {
     fn handle_update(&self, update_type: usize) -> Option<String>;
 
     /// Renders the component for a given state. Can optionally not render anything.
-    fn render(&self) -> Vec<DomNode>;
+    fn render(&self) -> Vec<Box<dyn Renderable>>;
 }
