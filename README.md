@@ -49,10 +49,10 @@ impl CounterFull {
     - [ ] Nested components
         - [ ] Props
         - [ ] Bi-directional binding
-    - [ ] Arrays
-        - [ ] DOM elements
+    - [x] Arrays
+        - [x] DOM elements
         - [ ] Other components
-    - [ ] Unique element identifiers
+    - [x] Unique element identifiers
     - [x] Optional children
     - [ ] Dynamic children content
     - [ ] Render as sibling

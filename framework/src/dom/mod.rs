@@ -63,33 +63,29 @@ pub enum NodeContent {
 }
 
 pub struct DomNode {
-    id: usize,
     kind: DomNodeKind,
     content: Option<NodeContent>,
     listeners: Vec<EventType>,
 }
 impl DomNode {
-    pub fn p(id: usize) -> Self {
+    pub fn p() -> Self {
         Self {
-            id,
             kind: DomNodeKind::P,
             content: None,
             listeners: Vec::new(),
         }
     }
 
-    pub fn button(id: usize) -> Self {
+    pub fn button() -> Self {
         Self {
-            id,
             kind: DomNodeKind::Button,
             content: None,
             listeners: Vec::new(),
         }
     }
 
-    pub fn div(id: usize) -> Self {
+    pub fn div() -> Self {
         Self {
-            id,
             kind: DomNodeKind::Div,
             content: None,
             listeners: Vec::new(),
@@ -127,7 +123,7 @@ impl Renderable for DomNode {
         self: Box<Self>,
         document: &Document,
         element: Option<Element>,
-        get_event_closure: &dyn Fn(usize, EventType) -> Function,
+        get_event_closure: &dyn Fn(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
         // If no existing element, create a new one
         let element = element.unwrap_or_else(|| {
@@ -170,7 +166,7 @@ impl Renderable for DomNode {
         for event in self.listeners {
             element.add_event_listener_with_callback(
                 &String::from(event),
-                &get_event_closure(self.id, event),
+                &get_event_closure(event),
             )?;
         }
 

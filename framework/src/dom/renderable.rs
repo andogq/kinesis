@@ -37,7 +37,7 @@ pub trait Renderable {
         self: Box<Self>,
         document: &Document,
         element: Option<Element>,
-        get_event_closure: &dyn Fn(usize, EventType) -> Function,
+        get_event_closure: &dyn Fn(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue>;
 }
 
@@ -49,7 +49,7 @@ where
         self: Box<Self>,
         _document: &Document,
         element: Option<Element>,
-        _get_event_closure: &dyn Fn(usize, EventType) -> Function,
+        _get_event_closure: &dyn Fn(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
         Ok(Some(DomNodeBuildResult {
             element,

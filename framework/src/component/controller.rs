@@ -7,7 +7,7 @@ use std::{
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 use web_sys::{console, Document, Element, Event};
 
-use super::{Component, EventType};
+use super::{identifier::Identifier, Component, EventType};
 use crate::dom::renderable::DependencyRegistrationCallback;
 use crate::util::HashMapList;
 
@@ -23,10 +23,12 @@ pub struct ComponentController {
     /// A reference to the document in order to create elements
     document: Document,
 
-    callbacks: Rc<RefCell<HashMap<(usize, EventType), Function>>>,
+    callbacks: Rc<RefCell<HashMap<(Identifier, EventType), Function>>>,
 
     dependency_registrations:
         Rc<RefCell<HashMapList<usize, (usize, DependencyRegistrationCallback)>>>,
+
+    identifier: Identifier,
 }
 
 /// Wrapper for component controller, allowing a reference to be passed to closures as required
@@ -44,6 +46,7 @@ impl ComponentControllerRef {
             document: document.clone(),
             callbacks: Rc::new(RefCell::new(HashMap::new())),
             dependency_registrations: Rc::new(RefCell::new(HashMapList::new())),
+            identifier: Identifier::new(),
         })))
     }
 
@@ -61,20 +64,33 @@ impl ComponentControllerRef {
                 .borrow()
                 .render()
                 .into_iter()
-                .map(|node| (node, controller.parent.clone())),
+                .enumerate()
+                .map(|(index, node)| {
+                    (
+                        node,
+                        controller.parent.clone(),
+                        controller.identifier.child(index),
+                    )
+                }),
         );
 
-        while let Some((node, parent)) = element_queue.pop_front() {
-            let get_callback_closure = &|id, event_type| {
+        while let Some((node, parent, identifier)) = element_queue.pop_front() {
+            console::log_1(&format!("{identifier:?}").into());
+            let get_callback_closure = &|event_type| {
                 let mut callbacks = controller.callbacks.borrow_mut();
 
                 // Prepare event handler closure incase it needs to be re-created
                 let event_closure = {
                     let component = Rc::clone(&controller.component);
                     let controller = self.clone();
+                    let identifier = identifier.clone();
 
                     move |event: Event| {
-                        let changed = component.borrow_mut().handle_event(id, event_type, event);
+                        let changed = component.borrow_mut().handle_event(
+                            identifier.clone(),
+                            event_type,
+                            event,
+                        );
 
                         // Check if anything was actually changed in the event handler
                         if let Some(changed) = changed {
@@ -103,7 +119,7 @@ impl ComponentControllerRef {
 
                 // Cache the closures so they can be re-used
                 callbacks
-                    .entry((id, event_type))
+                    .entry((identifier.clone(), event_type))
                     .or_insert_with(|| {
                         // Create a closure to bind with JS for this specific handler
                         Closure::<dyn Fn(Event)>::new(event_closure)
@@ -137,7 +153,12 @@ impl ComponentControllerRef {
                     let parent = build_result.element.unwrap_or(parent);
 
                     // Add the children to the render queue
-                    element_queue.extend(children.into_iter().map(|child| (child, parent.clone())));
+                    element_queue.extend(
+                        children
+                            .into_iter()
+                            .enumerate()
+                            .map(|(index, child)| (child, parent.clone(), identifier.child(index))),
+                    );
                 }
 
                 console::log_1(&"Running initial dependency render".into());
