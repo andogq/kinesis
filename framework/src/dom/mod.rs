@@ -1,31 +1,30 @@
 mod event;
 pub mod renderable;
-
-use std::rc::Rc;
+pub mod text;
 
 use js_sys::Function;
 use wasm_bindgen::JsValue;
-use web_sys::{console, Document, Element};
+use web_sys::{console, Document};
 
 pub use self::event::EventType;
-use self::renderable::{DomNodeBuildResult, DynamicContent, Renderable};
+use self::renderable::{DomNodeBuildResult, DynamicContent, Renderable, RenderedNode};
 
 #[derive(Clone, Copy)]
-pub enum DomNodeKind {
+pub enum DomElementKind {
     Div,
     P,
     Button,
 }
 
-impl Default for DomNodeKind {
+impl Default for DomElementKind {
     fn default() -> Self {
         Self::Div
     }
 }
 
-impl From<DomNodeKind> for &str {
-    fn from(dom_node_kind: DomNodeKind) -> &'static str {
-        use DomNodeKind::*;
+impl From<DomElementKind> for &str {
+    fn from(dom_node_kind: DomElementKind) -> &'static str {
+        use DomElementKind::*;
 
         match dom_node_kind {
             Div => "div",
@@ -62,52 +61,48 @@ pub enum NodeContent {
     Nodes(Vec<Box<dyn Renderable>>),
 }
 
+pub enum DomContent {
+    Element {
+        kind: DomElementKind,
+        content: Option<Vec<Box<dyn Renderable>>>,
+    },
+    Text {
+        content: String,
+    },
+}
+
 pub struct DomNode {
-    kind: DomNodeKind,
-    content: Option<NodeContent>,
+    kind: DomElementKind,
+    children: Vec<Box<dyn Renderable>>,
     listeners: Vec<EventType>,
 }
 impl DomNode {
     pub fn p() -> Self {
         Self {
-            kind: DomNodeKind::P,
-            content: None,
+            kind: DomElementKind::P,
+            children: Vec::new(),
             listeners: Vec::new(),
         }
     }
 
     pub fn button() -> Self {
         Self {
-            kind: DomNodeKind::Button,
-            content: None,
+            kind: DomElementKind::Button,
+            children: Vec::new(),
             listeners: Vec::new(),
         }
     }
 
     pub fn div() -> Self {
         Self {
-            kind: DomNodeKind::Div,
-            content: None,
+            kind: DomElementKind::Div,
+            children: Vec::new(),
             listeners: Vec::new(),
         }
     }
 
-    pub fn text_content(mut self, content: TextContent) -> Self {
-        self.content = Some(NodeContent::Text(content));
-        self
-    }
-
     pub fn child(mut self, child: Box<dyn Renderable>) -> Self {
-        // Make sure that self.content is Some(NodeContent::Nodes(_))
-        let children = if let NodeContent::Nodes(children) =
-            self.content.get_or_insert(NodeContent::Nodes(Vec::new()))
-        {
-            children
-        } else {
-            todo!("properly handle setting children when in a text node");
-        };
-
-        children.push(child);
+        self.children.push(child);
 
         self
     }
@@ -122,45 +117,55 @@ impl Renderable for DomNode {
     fn render(
         self: Box<Self>,
         document: &Document,
-        element: Option<Element>,
+        element: Option<RenderedNode>,
         get_event_closure: &dyn Fn(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
         // If no existing element, create a new one
-        let element = element.unwrap_or_else(|| {
-            console::log_1(&"creating element".into());
-            document
-                .create_element(self.kind.into())
-                .expect("to be able to create element")
-        });
+        let element = element
+            // Make sure that the cached node is an Element
+            .and_then(|element| {
+                if let RenderedNode::Element(element) = element {
+                    Some(element)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| {
+                console::log_1(&"creating element".into());
+
+                document
+                    .create_element(self.kind.into())
+                    .expect("to be able to create element")
+            });
 
         let mut dynamic_content = Vec::<DynamicContent>::new();
 
-        let children = match self.content {
-            Some(NodeContent::Text(text_content)) => {
-                match text_content {
-                    TextContent::Static(content) => {
-                        element.set_text_content(Some(content.as_str()));
-                    }
-                    TextContent::Dynamic {
-                        dependencies,
-                        update_type,
-                    } => dynamic_content.push(DynamicContent {
-                        dependencies,
-                        update_type,
-                        callback: {
-                            let element = element.clone();
-                            Rc::new(move |content| {
-                                element.set_text_content(Some(content.as_str()));
-                            })
-                        },
-                    }),
-                };
-
-                None
-            }
-            Some(NodeContent::Nodes(children)) => Some(children),
-            _ => None,
-        };
+        // let children = match content {
+        //     Some(NodeContent::Text(text_content)) => {
+        //         match text_content {
+        //             TextContent::Static(content) => {
+        //                 element.set_text_content(Some(content.as_str()));
+        //             }
+        //             TextContent::Dynamic {
+        //                 dependencies,
+        //                 update_type,
+        //             } => dynamic_content.push(DynamicContent {
+        //                 dependencies,
+        //                 update_type,
+        //                 callback: {
+        //                     let element = element.clone();
+        //                     Rc::new(move |content| {
+        //                         element.set_text_content(Some(content.as_str()));
+        //                     })
+        //                 },
+        //             }),
+        //         };
+        //
+        //         None
+        //     }
+        //     Some(NodeContent::Nodes(children)) => Some(children),
+        //     _ => None,
+        // };
 
         // Set up event listeners
         for event in self.listeners {
@@ -171,8 +176,9 @@ impl Renderable for DomNode {
         }
 
         Ok(Some(DomNodeBuildResult {
-            element: Some(element),
-            children,
+            element: Some(RenderedNode::Element(element)),
+            cache_node: true,
+            children: Some(self.children),
             dynamic_content,
             in_place: false,
         }))

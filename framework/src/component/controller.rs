@@ -7,8 +7,8 @@ use std::{
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 use web_sys::{console, Document, Element, Event};
 
-use super::{identifier::Identifier, Component, EventType};
-use crate::dom::renderable::DependencyRegistrationCallback;
+use super::{identifier::Identifier, Component, EventType, RenderType};
+use crate::dom::renderable::{DependencyRegistrationCallback, RenderedNode};
 use crate::util::HashMapList;
 
 /// Wrapper around a component, used to provide additional functionality and assist with rendering
@@ -18,7 +18,7 @@ pub struct ComponentController {
     component: Rc<RefCell<dyn Component>>,
 
     parent: Element,
-    mounted_elements: Option<Vec<Element>>,
+    mounted_elements: Option<Vec<RenderedNode>>,
 
     /// A reference to the document in order to create elements
     document: Document,
@@ -62,19 +62,31 @@ impl ComponentControllerRef {
             controller
                 .component
                 .borrow()
-                .render()
+                .render(RenderType::Root)
+                .unwrap_or_default()
                 .into_iter()
                 .enumerate()
                 .map(|(index, node)| {
                     (
                         node,
-                        controller.parent.clone(),
+                        RenderedNode::Element(controller.parent.clone()),
                         controller.identifier.child(index),
                     )
                 }),
         );
 
         while let Some((node, parent, identifier)) = element_queue.pop_front() {
+            // Only allow rendering a child into a parent that is an Element
+            let parent = if let RenderedNode::Element(parent) = parent {
+                parent
+            } else {
+                console::log_1(
+                    &"Skipping render due to child attempting to render in a non element node."
+                        .into(),
+                );
+                continue;
+            };
+
             console::log_1(&format!("{identifier:?}").into());
             let get_callback_closure = &|event_type| {
                 let mut callbacks = controller.callbacks.borrow_mut();
@@ -105,10 +117,12 @@ impl ComponentControllerRef {
                                 for (update_type, callback) in
                                     dependency_registrations.get(&change).into_iter().flatten()
                                 {
-                                    if let Some(content) = component.handle_update(*update_type) {
-                                        debug_dep_counter += 1;
-                                        callback(content);
-                                    }
+                                    // Perform a partial render of the component
+                                    component.render(RenderType::Partial(*update_type));
+
+                                    // TODO: Insert the generated content back into the DOM
+                                    // debug_dep_counter += 1;
+                                    // callback(content);
                                 }
                             }
 
@@ -145,12 +159,14 @@ impl ComponentControllerRef {
                         .push(element.clone());
 
                     if first_render {
-                        parent.append_child(element)?;
+                        parent.append_child(&element.into())?;
                     }
                 }
 
                 if let Some(children) = build_result.children {
-                    let parent = build_result.element.unwrap_or(parent);
+                    let parent = build_result
+                        .element
+                        .unwrap_or(RenderedNode::Element(parent));
 
                     let children = children
                         .into_iter()
@@ -173,9 +189,10 @@ impl ComponentControllerRef {
 
                 for dynamic_content in build_result.dynamic_content {
                     // Run action
-                    if let Some(content) = component.handle_update(dynamic_content.update_type) {
-                        (dynamic_content.callback)(content);
-                    }
+                    // TODO: Work out how to get rendered content into the DOM (same as above)
+                    // if let Some(content) = component.render(dynamic_content.update_type) {
+                    // (dynamic_content.callback)(content);
+                    // }
 
                     // Save action
                     for dependency in dynamic_content.dependencies {

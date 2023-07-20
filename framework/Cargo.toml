@@ -22,4 +22,5 @@ features = [
     "MouseEvent",
     "console",
     "DomStringMap",
+    "Text",
 ]

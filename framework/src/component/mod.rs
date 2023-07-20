@@ -7,6 +7,16 @@ use web_sys::Event;
 pub use self::identifier::Identifier;
 use crate::dom::{renderable::Renderable, EventType};
 
+/// Possible render types when rendering a component.
+pub enum RenderType {
+    /// Render the root portion of the component.
+    Root,
+
+    /// Render a partial piece of the component, generally in response to the component being
+    /// updated.
+    Partial(usize),
+}
+
 /// Trait that represents a renderable component
 pub trait Component {
     /// Handle an incomming event, allowing for mutation of the component's state.
@@ -17,8 +27,6 @@ pub trait Component {
         event: Event,
     ) -> Option<Vec<usize>>;
 
-    fn handle_update(&self, update_type: usize) -> Option<String>;
-
     /// Renders the component for a given state. Can optionally not render anything.
-    fn render(&self) -> Vec<Box<dyn Renderable>>;
+    fn render(&self, update_type: RenderType) -> Option<Vec<Box<dyn Renderable>>>;
 }
