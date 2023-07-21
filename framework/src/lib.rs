@@ -12,6 +12,9 @@ use web_sys::window;
 
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {
+    // Configure the panic hook to log to console.error
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
     let window = window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
     let body = document.body().expect("body to exist");
