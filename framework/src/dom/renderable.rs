@@ -13,7 +13,6 @@ pub type DependencyRegistrationCallback = Rc<dyn Fn(String)>;
 pub struct DynamicContent {
     pub dependencies: Vec<usize>,
     pub update_type: usize,
-    pub callback: DependencyRegistrationCallback,
 }
 
 /// Allows for DOM nodes and elements to be stored together, without having to cast between them as

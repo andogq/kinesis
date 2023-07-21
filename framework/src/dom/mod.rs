@@ -1,3 +1,4 @@
+pub mod dynamic;
 mod event;
 pub mod renderable;
 pub mod text;

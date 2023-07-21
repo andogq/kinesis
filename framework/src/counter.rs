@@ -2,7 +2,7 @@ use web_sys::Event;
 
 use crate::{
     component::{Component, Identifier, RenderType},
-    dom::{renderable::Renderable, text::Text, DomNode, EventType, TextContent},
+    dom::{dynamic::Dynamic, renderable::Renderable, text::Text, DomNode, EventType, TextContent},
 };
 
 pub struct Counter {
@@ -44,14 +44,8 @@ impl Component for Counter {
         match render_type {
             RenderType::Root => Some(vec![Box::new(
                 DomNode::div()
-                    // .child(Box::new(DomNode::p().text_content(TextContent::Dynamic {
-                    //     dependencies: vec![0],
-                    //     update_type: 0,
-                    // })))
-                    // .child(Box::new(DomNode::p().text_content(TextContent::Dynamic {
-                    //     dependencies: vec![1],
-                    //     update_type: 1,
-                    // })))
+                    .child(Box::new(Dynamic::new(0).depends_on(0)))
+                    .child(Box::new(Dynamic::new(1).depends_on(1)))
                     .child(Box::new(
                         DomNode::button()
                             .child(Box::new(Text::new("Decrease")))
