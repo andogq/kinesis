@@ -33,6 +33,8 @@ impl Renderable for Dynamic {
         element: Option<RenderedNode>,
         get_event_closure: &dyn Fn(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
+        // TODO: Maybe immediately render children?
+
         Ok(Some(DomNodeBuildResult {
             element: None,
             cache_node: false,

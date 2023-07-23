@@ -1,5 +1,6 @@
 pub mod dynamic;
 mod event;
+pub mod render_position;
 pub mod renderable;
 pub mod text;
 

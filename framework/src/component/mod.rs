@@ -1,4 +1,5 @@
 mod controller;
+pub mod controller_v2;
 mod identifier;
 
 pub use controller::*;

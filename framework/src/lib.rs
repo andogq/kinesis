@@ -3,10 +3,11 @@ mod dom;
 mod util;
 
 mod counter;
+mod simple;
 
-use component::ComponentControllerRef;
-use counter::Counter;
+use component::controller_v2::ControllerRef;
 
+use simple::Simple;
 use wasm_bindgen::prelude::*;
 use web_sys::window;
 
@@ -19,9 +20,11 @@ pub fn main() -> Result<(), JsValue> {
     let document = window.document().expect("should have a document on window");
     let body = document.body().expect("body to exist");
 
-    let c = ComponentControllerRef::new(Counter::new(), &document, body.into());
+    // let c = ComponentControllerRef::new(Counter::new(), &document, body.into());
+    // c.render()?;
 
-    c.render()?;
+    let c = ControllerRef::new(Simple, &document);
+    c.render(&body.into())?;
 
     Ok(())
 }

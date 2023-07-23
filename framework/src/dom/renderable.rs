@@ -1,12 +1,8 @@
-use std::rc::Rc;
-
 use js_sys::Function;
 use wasm_bindgen::JsValue;
 use web_sys::{Document, Element, Node};
 
 use super::EventType;
-
-pub type DependencyRegistrationCallback = Rc<dyn Fn(String)>;
 
 /// Generated representation of dynamic content within a component. Contains all of the required
 /// information to detect a changed dependency, and trigger a re-render.
@@ -23,11 +19,11 @@ pub enum RenderedNode {
     Element(Element),
 }
 
-impl Into<web_sys::Node> for &RenderedNode {
-    fn into(self) -> web_sys::Node {
+impl From<&RenderedNode> for web_sys::Node {
+    fn from(node: &RenderedNode) -> Self {
         use RenderedNode::*;
 
-        match self {
+        match node {
             Node(node) => node.clone().into(),
             Element(element) => element.clone().into(),
         }
