@@ -2,6 +2,8 @@ use js_sys::Function;
 use wasm_bindgen::JsValue;
 use web_sys::Document;
 
+use crate::component::Component;
+
 use super::{
     renderable::{DomNodeBuildResult, Renderable, RenderedNode},
     EventType,
@@ -22,6 +24,7 @@ impl Renderable for Text {
     fn render(
         self: Box<Self>,
         document: &Document,
+        _component: &dyn Component,
         element: Option<RenderedNode>,
         get_event_closure: &dyn Fn(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {

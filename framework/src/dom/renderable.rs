@@ -2,6 +2,8 @@ use js_sys::Function;
 use wasm_bindgen::JsValue;
 use web_sys::{Document, Element, Node};
 
+use crate::component::Component;
+
 use super::EventType;
 
 /// Generated representation of dynamic content within a component. Contains all of the required
@@ -57,6 +59,7 @@ pub trait Renderable {
     fn render(
         self: Box<Self>,
         document: &Document,
+        component: &dyn Component,
         element: Option<RenderedNode>,
         get_event_closure: &dyn Fn(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue>;
@@ -69,6 +72,7 @@ where
     fn render(
         self: Box<Self>,
         _document: &Document,
+        component: &dyn Component,
         element: Option<RenderedNode>,
         _get_event_closure: &dyn Fn(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {

@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
 use js_sys::Function;
 use wasm_bindgen::JsValue;
-use web_sys::{Document, Element};
+use web_sys::{console, Document, Element};
 
 use crate::{
     component::RenderType,
@@ -70,27 +70,39 @@ impl ControllerRef {
 
             while let Some((identifier, renderable, parent)) = queue.pop_front() {
                 // Render each of the child renderables
-                if let Some(result) =
-                    renderable.render(&controller.document, None, &|event_type| {
+                if let Some(result) = renderable.render(
+                    // Share a reference to the document so that it can create new elements
+                    &controller.document,
+                    // Share a reference to the component so that it can perform partial renders
+                    controller.component.as_ref(),
+                    // TODO: Share a cached element that could be re-used
+                    None,
+                    // Share a callback that can be used to create an event closure
+                    &|event_type| {
                         self.0
                             .clone()
                             .borrow_mut()
                             .get_event_callback_closure(identifier.clone(), event_type)
-                    })?
-                {
-                    if let Some(RenderedNode::Element(element)) = &result.element {
-                        if let Some(children) = result.children {
-                            // Add resulting children to the queue to be rendered
-                            queue.extend(children.into_iter().enumerate().map(
-                                |(i, renderable)| {
-                                    (identifier.child(i), renderable, element.clone())
-                                },
-                            ));
-                        }
-                    } else if result.element.is_some() && result.children.is_some() {
-                        todo!("determine a better way to pass a rendered container element around");
+                    },
+                )? {
+                    if matches!(result.element, Some(RenderedNode::Node(_)))
+                        && result.children.is_some()
+                    {
+                        todo!("work out how to handle trying to render children into non-element nodes");
+                    } else if let (RenderedNode::Element(parent), Some(children)) = (
+                        &result
+                            .element
+                            .clone()
+                            .unwrap_or(RenderedNode::Element(parent.clone())),
+                        result.children,
+                    ) {
+                        // Add children to the queue
+                        queue.extend(children.into_iter().enumerate().map(|(i, renderable)| {
+                            (identifier.child(i), renderable, parent.clone())
+                        }));
                     }
 
+                    // Add the element that was created to the parent
                     if let Some(element) = &result.element {
                         parent.append_with_node_1(&element.into())?;
                     }

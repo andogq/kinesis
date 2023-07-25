@@ -8,6 +8,8 @@ use js_sys::Function;
 use wasm_bindgen::JsValue;
 use web_sys::{console, Document};
 
+use crate::component::Component;
+
 pub use self::event::EventType;
 use self::renderable::{DomNodeBuildResult, DynamicContent, Renderable, RenderedNode};
 
@@ -119,6 +121,7 @@ impl Renderable for DomNode {
     fn render(
         self: Box<Self>,
         document: &Document,
+        component: &dyn Component,
         element: Option<RenderedNode>,
         get_event_closure: &dyn Fn(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
