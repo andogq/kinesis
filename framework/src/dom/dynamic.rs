@@ -1,6 +1,6 @@
 use js_sys::Function;
 use wasm_bindgen::JsValue;
-use web_sys::Document;
+use web_sys::{console, Document};
 
 use crate::component::{Component, RenderType};
 
@@ -36,20 +36,20 @@ impl Renderable for Dynamic {
         document: &Document,
         component: &dyn Component,
         element: Option<RenderedNode>,
-        get_event_closure: &dyn Fn(EventType) -> Function,
+        get_event_closure: &mut dyn FnMut(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
         // Immediately render the children
         let children = component.render(RenderType::Partial(self.render_type));
 
         Ok(Some(DomNodeBuildResult {
-            element: None,
+            element,
             cache_node: false,
             children,
             dynamic_content: vec![DynamicContent {
                 dependencies: self.dependencies,
                 update_type: self.render_type,
             }],
-            in_place: false,
+            in_place: true,
         }))
     }
 }

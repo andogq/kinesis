@@ -1,6 +1,6 @@
 use js_sys::Function;
 use wasm_bindgen::JsValue;
-use web_sys::Document;
+use web_sys::{Document, Node};
 
 use crate::component::Component;
 
@@ -26,9 +26,16 @@ impl Renderable for Text {
         document: &Document,
         _component: &dyn Component,
         element: Option<RenderedNode>,
-        get_event_closure: &dyn Fn(EventType) -> Function,
+        get_event_closure: &mut dyn FnMut(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
         let node = document.create_text_node(&self.0);
+
+        if let Some(element) = element {
+            let child = Node::from(&element);
+
+            let parent = child.parent_node().expect("parent to exist");
+            parent.replace_child(&node, &child)?;
+        }
 
         Ok(Some(DomNodeBuildResult {
             element: Some(RenderedNode::Node(node.into())),

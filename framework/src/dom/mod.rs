@@ -11,10 +11,14 @@ use web_sys::{console, Document};
 use crate::component::Component;
 
 pub use self::event::EventType;
-use self::renderable::{DomNodeBuildResult, DynamicContent, Renderable, RenderedNode};
+use self::{
+    render_position::RenderPosition,
+    renderable::{DomNodeBuildResult, DynamicContent, Renderable, RenderedNode},
+};
 
 #[derive(Clone, Copy)]
 pub enum DomElementKind {
+    H1,
     Div,
     P,
     Button,
@@ -31,6 +35,7 @@ impl From<DomElementKind> for &str {
         use DomElementKind::*;
 
         match dom_node_kind {
+            H1 => "h1",
             Div => "div",
             P => "p",
             Button => "button",
@@ -81,6 +86,14 @@ pub struct DomNode {
     listeners: Vec<EventType>,
 }
 impl DomNode {
+    pub fn h1() -> Self {
+        Self {
+            kind: DomElementKind::H1,
+            children: Vec::new(),
+            listeners: Vec::new(),
+        }
+    }
+
     pub fn p() -> Self {
         Self {
             kind: DomElementKind::P,
@@ -123,8 +136,12 @@ impl Renderable for DomNode {
         document: &Document,
         component: &dyn Component,
         element: Option<RenderedNode>,
-        get_event_closure: &dyn Fn(EventType) -> Function,
+        get_event_closure: &mut dyn FnMut(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
+        // TODO: Determine when to create a new element based off of the position
+
+        // TODO: Optionally 'render' the elmeent depending on it's position
+
         // If no existing element, create a new one
         let element = element
             // Make sure that the cached node is an Element

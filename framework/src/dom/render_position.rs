@@ -7,19 +7,19 @@ use super::renderable::RenderedNode;
 #[derive(Clone)]
 pub enum RenderPosition {
     /// Render as an appended child of the provided element.
-    Append(Element),
+    Append(RenderedNode),
 
     /// Render as a prepended child of the provided element.
-    Prepend(Element),
+    Prepend(RenderedNode),
 
     /// Insert before the provided element.
-    Before(Element),
+    Before(RenderedNode),
 
     /// Insert after the provided element.
-    After(Element),
+    After(RenderedNode),
 
     /// Replace the provided element.
-    Replace(Element),
+    Replace(RenderedNode),
 
     /// Do not render.
     None,
@@ -30,7 +30,7 @@ pub enum RenderPosition {
 macro_rules! generate_match {
     ($self:ident, $element:ident {
         $none:path,
-        $($variant:path: $method:ident),*
+        $($variant:path: ($method:ident)),*
     }) => {
         match $self {
             $(
@@ -47,23 +47,68 @@ macro_rules! generate_match {
 impl RenderPosition {
     pub fn render(&self, element: &RenderedNode) -> Result<(), JsValue> {
         use RenderPosition::*;
+        use RenderedNode::*;
 
         let element = &element.into();
 
-        generate_match!(
-            self,
-            element {
-                None,
-                Append: append_child,
-                Prepend: prepend_with_node_1,
-                Before: before_with_node_1,
-                After: after_with_node_1,
-                Replace: replace_with_with_node_1
+        match self {
+            Append(Element(parent)) => {
+                parent.append_child(element);
             }
-        )
+            Append(Node(parent)) => {
+                parent.append_child(element);
+            }
+            Prepend(Element(parent)) => {
+                parent.prepend_with_node_1(element);
+            }
+            Prepend(Node(parent)) => {
+                if let Some(sibling) = parent.first_child() {
+                    parent.insert_before(&sibling, Some(element));
+                } else {
+                    // No children in parent, so just append it
+                    parent.append_child(element);
+                }
+            }
+            Before(Element(sibling)) => {
+                sibling.before_with_node_1(element);
+            }
+            Before(Node(sibling)) => {
+                sibling
+                    .parent_element()
+                    .expect("to be able to get a parent element")
+                    .insert_before(sibling, Some(element));
+            }
+            After(Element(parent)) => {
+                parent.after_with_node_1(element);
+            }
+            After(Node(sibling)) => {
+                let parent = sibling
+                    .parent_element()
+                    .expect("to be able to get a parent element");
+
+                if let Some(sibling) = sibling.next_sibling() {
+                    parent.insert_before(&sibling, Some(element));
+                } else {
+                    // Can assume there's no more siblings, so append to parent
+                    parent.append_child(element);
+                }
+            }
+            Replace(Element(old_element)) => {
+                old_element.replace_with_with_node_1(element);
+            }
+            Replace(Node(old_element)) => {
+                old_element
+                    .parent_node()
+                    .expect("to be able to get a parent node")
+                    .replace_child(old_element, element);
+            }
+            None => (),
+        }
+
+        Ok(())
     }
 
-    pub fn get_element(&self) -> Option<Element> {
+    pub fn get_element(&self) -> Option<RenderedNode> {
         use RenderPosition::*;
 
         match self {

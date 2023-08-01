@@ -26,7 +26,7 @@ impl From<&RenderedNode> for web_sys::Node {
         use RenderedNode::*;
 
         match node {
-            Node(node) => node.clone().into(),
+            Node(node) => node.clone(),
             Element(element) => element.clone().into(),
         }
     }
@@ -36,7 +36,6 @@ impl From<&RenderedNode> for web_sys::Node {
 /// as well as any children (that will need to be rendered), and a list of dynamic content within
 /// the component.
 pub struct DomNodeBuildResult {
-    /// Element that the node was rendered into.
     pub element: Option<RenderedNode>,
 
     /// Whether to store the returned node, and pass it back in on the next render or update. This
@@ -53,7 +52,7 @@ pub struct DomNodeBuildResult {
     pub in_place: bool,
 }
 
-/// Represents anything that could be rednered in th eDOM
+/// Represents anything that could be rednered in the DOM
 pub trait Renderable {
     /// Builds (or updates in place) the current node. Will not build children.
     fn render(
@@ -61,7 +60,7 @@ pub trait Renderable {
         document: &Document,
         component: &dyn Component,
         element: Option<RenderedNode>,
-        get_event_closure: &dyn Fn(EventType) -> Function,
+        get_event_closure: &mut dyn FnMut(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue>;
 }
 
@@ -74,14 +73,20 @@ where
         _document: &Document,
         component: &dyn Component,
         element: Option<RenderedNode>,
-        _get_event_closure: &dyn Fn(EventType) -> Function,
+        _get_event_closure: &mut dyn FnMut(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
-        Ok(Some(DomNodeBuildResult {
-            element,
-            cache_node: false,
-            children: Some(self.into_iter().collect()),
-            dynamic_content: Vec::new(),
-            in_place: true,
-        }))
+        let children = self.into_iter().collect::<Vec<_>>();
+
+        Ok(if !children.is_empty() {
+            Some(DomNodeBuildResult {
+                element,
+                cache_node: false,
+                children: Some(children),
+                dynamic_content: Vec::new(),
+                in_place: true,
+            })
+        } else {
+            None
+        })
     }
 }

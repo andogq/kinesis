@@ -1,11 +1,14 @@
-use web_sys::Event;
+use web_sys::{console, Event};
 
 use crate::{
     component::{Component, Identifier, RenderType},
     dom::{dynamic::Dynamic, renderable::Renderable, text::Text, DomNode, EventType},
 };
 
-pub struct Simple;
+#[derive(Default)]
+pub struct Simple {
+    count: usize,
+}
 
 impl Component for Simple {
     fn handle_event(
@@ -14,7 +17,9 @@ impl Component for Simple {
         event_type: EventType,
         event: Event,
     ) -> Option<Vec<usize>> {
-        None
+        // WARN: Bad matching of event here, just for testing
+        self.count += 1;
+        Some(vec![0])
     }
 
     fn render(&self, update_type: RenderType) -> Option<Vec<Box<dyn Renderable>>> {
@@ -22,11 +27,28 @@ impl Component for Simple {
             RenderType::Root => Some(vec![
                 Box::new(DomNode::p().child(Box::new(Text::new("Simple component"))))
                     as Box<dyn Renderable>,
-                Box::new(DomNode::p().child(Box::new(Dynamic::new(0)))),
+                Box::new(
+                    DomNode::p()
+                        .child(Box::new(Dynamic::new(0).depends_on(0)))
+                        .listen(EventType::Click),
+                ),
+                Box::new(Dynamic::new(1).depends_on(0)),
             ]),
-            RenderType::Partial(0) => Some(vec![
-                Box::new(Text::new("Dynamic text")) as Box<dyn Renderable>
-            ]),
+            RenderType::Partial(0) => {
+                Some(vec![
+                    Box::new(Text::new(format!("Dynamic text: {}", self.count)))
+                        as Box<dyn Renderable>,
+                ])
+            }
+            RenderType::Partial(1) => {
+                console::log_1(&format!("rendering, {}", self.count % 2 == 0).into());
+
+                (self.count % 2 == 0).then(|| {
+                    vec![Box::new(
+                        DomNode::h1().child(Box::new(Text::new("Even")) as Box<dyn Renderable>),
+                    ) as Box<dyn Renderable>]
+                })
+            }
             _ => None,
         }
     }

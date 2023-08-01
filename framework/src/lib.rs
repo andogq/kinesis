@@ -23,7 +23,7 @@ pub fn main() -> Result<(), JsValue> {
     // let c = ComponentControllerRef::new(Counter::new(), &document, body.into());
     // c.render()?;
 
-    let c = ControllerRef::new(Simple, &document);
+    let c = ControllerRef::new(Simple::default(), &document);
     c.render(&body.into())?;
 
     Ok(())
