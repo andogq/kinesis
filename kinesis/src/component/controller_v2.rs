@@ -33,7 +33,7 @@ pub struct Controller {
     dependencies: HashMapList<usize, (usize, Identifier)>,
 
     /// Saves a reference to the created elements in a render, so they can be re-used.
-    rendered_elements: HashMap<Identifier, RenderedNode>,
+    rendered_elements: HashMap<RenderType, HashMap<Identifier, RenderedNode>>,
 }
 
 impl Controller {
@@ -118,8 +118,10 @@ impl Controller {
         let document = self.document.clone();
         let component = self.component.borrow();
 
+        console::log_1(&"hi".into());
+
         // Perform the initial render of the component, to retrieve all of the renderables
-        if let Some(renderables) = component.render(render_type) {
+        if let Some(renderables) = component.render(render_type.clone()) {
             // Build a queue of renderables to render, it's identifier, and the parent element it
             // will be rendered into.
             let mut queue = renderables
@@ -128,9 +130,20 @@ impl Controller {
                 .map(|(i, renderable)| (root_identifier.child(i), renderable, parent.clone()))
                 .collect::<VecDeque<_>>();
 
+            let mut used_element_identifiers = HashSet::new();
+            let rendered_elements = self.rendered_elements.entry(render_type).or_default();
+
             while let Some((identifier, renderable, parent)) = queue.pop_front() {
                 // Attempt to find element in the element cache
-                let element = self.rendered_elements.get(&identifier).cloned();
+                let element = rendered_elements.get(&identifier).cloned();
+
+                console::log_1(
+                    &format!(
+                        "cached element found for {identifier}? {}",
+                        element.is_some()
+                    )
+                    .into(),
+                );
 
                 // Render each of the child renderables
                 if let Some(result) = renderable.render(
@@ -180,18 +193,31 @@ impl Controller {
 
                     if let Some(element) = result.element {
                         // Save the element for future use
-                        self.rendered_elements.insert(identifier, element.clone());
+                        rendered_elements.insert(identifier.clone(), element.clone());
+                        used_element_identifiers.insert(identifier);
 
                         // Add the element to the parent
                         if let Some(parent) = parent {
                             Node::from(&parent).append_child(&(&element).into())?;
                         }
-                    } else {
-                        // Nothing was rendered, make sure there's no existing reference to it
-                        self.rendered_elements.remove(&identifier);
                     }
                 }
             }
+
+            // Get rid of unused identifiers
+            rendered_elements
+                .keys()
+                .cloned()
+                .collect::<HashSet<_>>()
+                .difference(&used_element_identifiers)
+                .for_each(|key| {
+                    if let Some(element) = rendered_elements.remove(key) {
+                        let node = Node::from(&element);
+                        if let Some(parent) = node.parent_node() {
+                            parent.remove_child(&node).ok();
+                        }
+                    }
+                });
         } else {
             console::log_1(&"nothing to render".into());
         }

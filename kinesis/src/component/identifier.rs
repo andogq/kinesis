@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct Identifier(Vec<usize>);
 
@@ -36,5 +38,19 @@ where
 impl AsRef<[usize]> for Identifier {
     fn as_ref(&self) -> &[usize] {
         self.0.as_ref()
+    }
+}
+
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.0
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(".")
+        )
     }
 }

@@ -9,7 +9,7 @@ use component::controller_v2::ControllerRef;
 
 use simple::Simple;
 use wasm_bindgen::prelude::*;
-use web_sys::window;
+use web_sys::{console, window};
 
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {

@@ -1,3 +1,3 @@
-import init from "framework";
+import init from "kinesis";
 
 init();
