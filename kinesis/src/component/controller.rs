@@ -1,309 +1,284 @@
-use js_sys::Function;
 use std::{
     cell::RefCell,
-    collections::{HashMap, VecDeque},
+    collections::{HashSet, VecDeque},
+    ops::Deref,
     rc::Rc,
 };
+
+use js_sys::Function;
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
-use web_sys::{console, Document, Element, Event};
+use web_sys::{console, Document, Element, Event, Node};
 
-use super::{identifier::Identifier, Component, EventType, RenderType};
-use crate::dom::{
-    render_position::RenderPosition,
-    renderable::{DynamicContent, Renderable, RenderedNode},
+use crate::{
+    component::RenderType,
+    dom::{
+        renderable::{DynamicContent, RenderedNode},
+        EventType,
+    },
+    util::{HashMapList, Tree},
 };
-use crate::util::HashMapList;
 
-/// Wrapper around a component, used to provide additional functionality and assist with rendering
-/// the component to the DOM.
-pub struct ComponentController {
-    /// The component to be rendered
+use super::{Component, Identifier};
+
+pub struct Controller {
+    /// The component that this controller is handling.
     component: Rc<RefCell<dyn Component>>,
 
-    parent: Element,
-    mounted_elements: Option<Vec<RenderedNode>>,
-
-    /// A reference to the document in order to create elements
+    /// A reference to the document object, so that elements can be created.
     document: Document,
 
-    callbacks: Rc<RefCell<HashMap<(Identifier, EventType), Function>>>,
+    /// Maps an update type and corresponding identifier for the rendered node (value) to it's
+    /// dependencies (key).
+    dependencies: HashMapList<usize, (usize, Identifier)>,
 
-    dependency_registrations: Rc<RefCell<HashMapList<usize, usize>>>,
-
-    identifier: Identifier,
-
-    rendered_elements: Rc<RefCell<HashMap<RenderType, Vec<RenderedNode>>>>,
+    element_tree: Tree<usize, RenderedNode>,
+    previous_identifiers: HashSet<Identifier>,
 }
 
-/// Wrapper for component controller, allowing a reference to be passed to closures as required
-pub struct ComponentControllerRef(Rc<RefCell<ComponentController>>);
-
-struct RenderQueueEntry {
-    renderable: Box<dyn Renderable>,
-    position: RenderPosition,
-    identifier: Identifier,
-}
-
-impl ComponentControllerRef {
-    pub fn new<C>(component: C, document: &Document, parent: Element) -> Self
+impl Controller {
+    pub fn new<C>(component: C, document: &Document) -> Self
     where
         C: Component + 'static,
     {
-        Self(Rc::new(RefCell::new(ComponentController {
-            component: Rc::new(RefCell::new(component)),
-            parent,
-            mounted_elements: None,
+        Self {
+            component: Rc::new(RefCell::new(component)) as Rc<RefCell<dyn Component>>,
             document: document.clone(),
-            callbacks: Rc::new(RefCell::new(HashMap::new())),
-            dependency_registrations: Rc::new(RefCell::new(HashMapList::new())),
-            identifier: Identifier::new(),
-
-            rendered_elements: Rc::new(RefCell::new(HashMap::new())),
-        })))
+            dependencies: HashMapList::new(),
+            element_tree: Tree::new(),
+            previous_identifiers: HashSet::new(),
+        }
     }
 
-    pub fn render(&self) -> Result<(), JsValue> {
-        let (first_render, mut mounted_elements, mut element_queue) = {
-            let mut controller = self.0.borrow_mut();
+    /// Generate a closure that cen be attached to an event listener for a DOM element. The
+    /// identifier and event types are required, so they can be passed back into the controller in
+    /// order for it to appropriately handle the update.
+    ///
+    /// Requires mutable access to the controller, so that it can use it within the callback.
+    fn get_event_callback_closure(
+        controller_ref: &ControllerRef,
+        identifier: Identifier,
+        event_type: EventType,
+    ) -> Function {
+        let controller_ref = controller_ref.clone();
 
-            // Take the mounted elements, so they can be passed into the DOM node render
-            let first_render = controller.mounted_elements.is_none();
-            let mounted_elements = controller.mounted_elements.take().into_iter().flatten();
-
-            // Queue of elements to render (children will be pushed in same order)
-            let element_queue = VecDeque::from_iter(
-                controller
-                    .component
-                    .borrow()
-                    .render(RenderType::Root)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, node)| RenderQueueEntry {
-                        renderable: node,
-                        position: RenderPosition::Append(controller.parent.clone()),
-                        identifier: controller.identifier.child(index),
-                    }),
+        Closure::<dyn Fn(Event)>::new(Box::new(move |event: Event| {
+            // Gain a mutable reference to the controller
+            let mut controller = controller_ref.0.borrow_mut();
+            let changed = controller.component.borrow_mut().handle_event(
+                identifier.clone(),
+                event_type,
+                event,
             );
 
-            (first_render, mounted_elements, element_queue)
-        };
-
-        while let Some(RenderQueueEntry {
-            renderable,
-            position,
-            identifier: renderable_identifier,
-        }) = element_queue.pop_front()
-        {
-            let children_to_render = self.render_renderable(
-                renderable,
-                renderable_identifier,
-                position,
-                mounted_elements.next(),
-            )?;
-
-            if let Some(children_to_render) = children_to_render {
-                for child in children_to_render {
-                    element_queue.push_front(child);
-                }
+            // Trigger the update in the component
+            if let Some(changed) = changed {
+                controller.handle_update(&controller_ref, &changed).unwrap();
             }
-        }
+        }) as Box<dyn Fn(Event)>)
+        .into_js_value()
+        .unchecked_into()
+    }
 
-        // TODO: Maybe perform initial render? Or should this happen somewhere else?
-        // let mut controller = self.0.borrow();
-        // console::log_1(&"Running initial dependency render".into());
-        // let mut dependency_registrations = controller.dependency_registrations.borrow_mut();
-        // let component = controller.component.borrow();
-        //
-        // for (dependency, update_type) in dependency_registrations.iter() {
-        //     console::log_1(&format!("rendering {} {}", dependency, update_type).into());
-        //
-        //     // Request the partial render from the component
-        //     if let Some(renderables) = component.render(RenderType::Partial(*update_type)) {
-        //         // Render each of the returned children
-        //         for renderable in renderables {
-        //             let position = todo!();
-        //
-        //             // TODO: How to properly identify content generated by a partial update?
-        //             // Probably will be based off of the parent identifier, and the renderable's
-        //             // position in the list.
-        //             let renderable_identifier = todo!();
-        //
-        //             // TODO: How to store previously rendered dynamic value. Probably should group
-        //             // them by the update type and parent. Something needs to handle whether the
-        //             // element is replaced or not, and also how to make sure that they are
-        //             // appropriately removed if required.
-        //             let mounted_element = todo!();
-        //
-        //             self.render_renderable(
-        //                 renderable,
-        //                 renderable_identifier,
-        //                 position,
-        //                 mounted_element,
-        //             );
-        //         }
-        //     }
-        // }
+    /// Will update component in the DOM as needed to reflect the changed dependencies.
+    pub fn handle_update(
+        &mut self,
+        controller_ref: &ControllerRef,
+        changed_dependencies: &[usize],
+    ) -> Result<(), JsValue> {
+        // Determine what renders need to run
+        for (render_type, identifier) in changed_dependencies
+            .iter()
+            .filter_map(|dependency| self.dependencies.get(dependency))
+            .flatten()
+            .cloned()
+            .collect::<HashSet<_>>()
+        {
+            self.perform_render(
+                controller_ref,
+                None,
+                RenderType::Partial(render_type),
+                &identifier,
+            )
+            .unwrap();
+        }
 
         Ok(())
     }
 
-    /// Generates a closure that can be attached to a DOM element, in order to respond to an event.
-    /// The target element's identifier must be included, so that it can be sent back to the
-    /// controller to identify the source of the event, and the event type is required in order to
-    /// correctly trigger the relevant callback.
-    fn create_event_callback_closure(
-        &self,
-        identifier: &Identifier,
-        event_type: EventType,
-    ) -> Box<dyn Fn(Event)> {
-        let controller = self.0.borrow();
-        let component = Rc::clone(&controller.component);
-        let controller_rc = self.clone();
+    pub fn perform_render(
+        &mut self,
+        controller_ref: &ControllerRef,
+        // Optional parent, as if it is not supplied then it is assumed the node is being renderd
+        // in place
+        parent: Option<RenderedNode>,
+        render_type: RenderType,
+        root_identifier: &Identifier,
+    ) -> Result<(), JsValue> {
+        let root_identifier = root_identifier.clone();
+        let document = self.document.clone();
+        let component = self.component.borrow();
 
-        let identifier = identifier.clone();
+        // Perform the initial render of the component, to retrieve all of the renderables
+        if let Some(renderables) = component.render(render_type.clone()) {
+            // Build a queue of renderables to render, it's identifier, and the parent element it
+            // will be rendered into.
+            let mut queue = renderables
+                .into_iter()
+                .enumerate()
+                .map(|(i, renderable)| (root_identifier.child(i), renderable, parent.clone()))
+                .collect::<VecDeque<_>>();
 
-        Box::new(move |event: Event| {
-            let changed =
-                component
-                    .borrow_mut()
-                    .handle_event(identifier.clone(), event_type, event);
+            let mut used_element_identifiers = HashSet::new();
 
-            // Check if anything was actually changed in the event handler
-            if let Some(changed) = changed {
-                let component = component.borrow();
-                let controller = controller_rc.0.borrow();
-                let dependency_registrations = controller.dependency_registrations.borrow();
+            while let Some((identifier, renderable, parent)) = queue.pop_front() {
+                // Attempt to find element in the element cache
+                let element = self.element_tree.get(identifier.as_ref()).cloned();
 
-                let mut debug_dep_counter = 0;
+                console::log_1(
+                    &format!(
+                        "cached element found for {identifier}? {}",
+                        element.is_some()
+                    )
+                    .into(),
+                );
 
-                for change in changed {
-                    for update_type in dependency_registrations.get(&change).into_iter().flatten() {
-                        // Perform a partial render of the component
-                        let render_type = RenderType::Partial(*update_type);
+                // Render each of the child renderables
+                if let Some(result) = renderable.render(
+                    // Share a reference to the document so that it can create new elements
+                    &document,
+                    // Share a reference to the component so that it can perform partial renders
+                    component.deref(),
+                    element.clone(),
+                    // Share a callback that can be used to create an event closure
+                    &mut |event_type| {
+                        Controller::get_event_callback_closure(
+                            controller_ref,
+                            identifier.clone(),
+                            event_type,
+                        )
+                    },
+                )? {
+                    if let Some(children) = result.children {
+                        queue.extend(children.into_iter().enumerate().map(|(i, renderable)| {
+                            (
+                                identifier.child(i),
+                                renderable,
+                                if result.in_place {
+                                    parent.clone()
+                                } else {
+                                    result.element.clone()
+                                },
+                            )
+                        }));
+                    }
 
-                        // Fetch the previously rendered content
-                        let mut rendered_elements = controller.rendered_elements.borrow_mut();
-                        let existing = rendered_elements.get(&render_type);
+                    // Save the dependencies
+                    for (dependency, update_type) in result.dynamic_content.into_iter().flat_map(
+                        |DynamicContent {
+                             dependencies,
+                             update_type,
+                         }| {
+                            dependencies
+                                .into_iter()
+                                .map(move |dependency| (dependency, update_type))
+                        },
+                    ) {
+                        // TODO: Work out way to de-dupe these before insertion
+                        self.dependencies
+                            .insert(dependency, (update_type, identifier.clone()));
+                    }
 
-                        let renderables = component.render(render_type.clone());
+                    if let Some(element) = result.element {
+                        // Save the element for future use
+                        self.element_tree
+                            .insert(identifier.clone(), element.clone())
+                            .expect("to be able to insert item into tree");
+                        used_element_identifiers.insert(identifier);
 
-                        // Insert the newly rendered content
-                        if let Some(renderables) = renderables {
-                            // rendered_elements.insert(render_type, renderables);
-                            // TODO: Build each of the renderables that are returned
-                            // Need a recursive render call???
+                        // Add the element to the parent
+                        if let Some(parent) = parent {
+                            Node::from(&parent).append_child(&(&element).into())?;
+                        }
+                    }
+                }
+            }
 
-                            // TODO: Insert new renderables into the DOM
-                        } else {
-                            rendered_elements.remove(&render_type);
+            // Get rid of unused elements from the render
+            // Somehow need to associate certain element instances with a render type. Once that
+            // render type completes, then remove any elements that were not used previously.
+
+            // TODO: Need to somehow seperate keys for each of the previous render types, but in a
+            // way that they can be related to each other (eg a Root render type that uses other
+            // partial render types).
+
+            if let Some(node) = self.element_tree.get_node(root_identifier.as_ref()) {
+                let mut to_remove = vec![];
+                let mut queue = vec![(root_identifier, node)];
+
+                // Traverse the tree from here and work out what wasn't altered
+                while let Some((identifier, node)) = queue.pop() {
+                    // Add children to queue
+                    queue.extend(node.children.0.iter_mut().map(|(id, node)| {
+                        let identifier = identifier.child(*id);
+                        (identifier, node)
+                    }));
+
+                    // See if element was rendered, and remove it if not
+                    if let (false, Some(node)) = (
+                        used_element_identifiers.contains(&identifier),
+                        node.value.as_ref(),
+                    ) {
+                        // Remove it from the DOM
+                        let node = Node::from(node);
+                        if let Some(parent) = node.parent_node() {
+                            // Possible that parent could've already been removed
+                            parent.remove_child(&node);
                         }
 
-                        // TODO: Insert the generated content back into the DOM
-                        debug_dep_counter += 1;
+                        // Remove it from the tree
+                        to_remove.push(identifier);
                     }
                 }
 
-                console::log_1(&format!("Updating {debug_dep_counter} deps").into());
-            }
-        })
-    }
-
-    /// Renders a renderable as indicated by the `position` argument.
-    fn render_renderable(
-        &self,
-        renderable: Box<dyn Renderable>,
-        renderable_identifier: Identifier,
-        position: RenderPosition,
-        mounted_element: Option<RenderedNode>,
-    ) -> Result<Option<Vec<RenderQueueEntry>>, JsValue> {
-        // A callback that can be used to generate a new event closure
-        let generate_event_callback_closure = &|event_type| {
-            let controller = self.0.borrow();
-            let mut callbacks = controller.callbacks.borrow_mut();
-
-            // Prepare event handler closure incase it needs to be re-created
-            let event_closure =
-                self.create_event_callback_closure(&renderable_identifier, event_type);
-
-            // Cache the closures so they can be re-used
-            callbacks
-                .entry((renderable_identifier.clone(), event_type))
-                .or_insert_with(|| {
-                    // Create a closure to bind with JS for this specific handler
-                    Closure::<dyn Fn(Event)>::new(event_closure)
-                        .into_js_value()
-                        .unchecked_into()
-                })
-                .clone()
-        };
-
-        // Build or update the element
-        let document = self.0.borrow().document.clone();
-        if let Some(build_result) =
-            renderable.render(&document, mounted_element, generate_event_callback_closure)?
-        {
-            let mut controller = self.0.borrow_mut();
-
-            {
-                // Save dependencies
-                let mut dependency_registrations = controller.dependency_registrations.borrow_mut();
-                for (dependency, update_type) in build_result.dynamic_content.into_iter().flat_map(
-                    |DynamicContent {
-                         dependencies,
-                         update_type,
-                     }| {
-                        dependencies
-                            .into_iter()
-                            .map(move |dependency| (dependency, update_type))
-                    },
-                ) {
-                    dependency_registrations.insert(dependency, update_type);
+                for identifier in to_remove {
+                    self.element_tree.remove(identifier);
                 }
             }
 
-            // Only perform render if a build result is returned and there's an element to
-            // render
-            if let Some(element) = &build_result.element {
-                // Save the mounted element for this node
-                // TODO: Change this to track by identifier
-                controller
-                    .mounted_elements
-                    .get_or_insert(Vec::new())
-                    .push(element.clone());
-
-                // Render the element in its position
-                position.render(element)?;
-
-                // Line all of the children up for rendering
-                if let RenderedNode::Element(element) = element {
-                    let child_position = RenderPosition::Append(element.clone());
-
-                    let children = build_result.children.map(|children| {
-                        let children = children.into_iter().enumerate().map(|(index, child)| {
-                            RenderQueueEntry {
-                                renderable: child,
-                                position: child_position.clone(),
-                                identifier: renderable_identifier.child(index),
-                            }
-                        });
-
-                        // TODO: Make sure order is correct here
-                        children.collect()
-                    });
-
-                    // Only possible for the component to have children here
-                    return Ok(children);
-                }
-            }
+            // Update the previous identifiers for the next render
+            self.previous_identifiers = used_element_identifiers;
+        } else {
+            console::log_1(&"nothing to render".into());
         }
 
-        Ok(None)
+        Ok(())
     }
 }
 
-impl Clone for ComponentControllerRef {
-    fn clone(&self) -> Self {
-        Self(Rc::clone(&self.0))
+#[derive(Clone)]
+pub struct ControllerRef(Rc<RefCell<Controller>>);
+
+impl ControllerRef {
+    pub fn new<C>(component: C, document: &Document) -> Self
+    where
+        C: Component + 'static,
+    {
+        Self(Rc::new(RefCell::new(Controller::new(component, document))))
+    }
+
+    /// Render the component, returning the created elements.
+    ///
+    /// Render must (?) be created on the wrapped struct, as it requires passing the [Rc] to the
+    /// [Controller] to closures, such as for the `get_event_closure` callback. This could be
+    /// changed if another way of building event closures is used.
+    pub fn render(&self, parent: &Element) -> Result<Option<Vec<Element>>, JsValue> {
+        self.0.borrow_mut().perform_render(
+            self,
+            Some(RenderedNode::Element(parent.clone())),
+            RenderType::Root,
+            &Identifier::new(),
+        )?;
+
+        Ok(None)
     }
 }

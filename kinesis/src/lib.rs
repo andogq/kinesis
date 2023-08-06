@@ -5,7 +5,7 @@ mod util;
 mod counter;
 mod simple;
 
-use component::controller_v2::ControllerRef;
+use component::ControllerRef;
 
 use simple::Simple;
 use wasm_bindgen::prelude::*;

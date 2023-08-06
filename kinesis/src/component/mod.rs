@@ -1,8 +1,7 @@
-// mod controller;
-pub mod controller_v2;
+mod controller;
 mod identifier;
 
-pub use controller_v2::*;
+pub use controller::*;
 use web_sys::Event;
 
 pub use self::identifier::Identifier;
