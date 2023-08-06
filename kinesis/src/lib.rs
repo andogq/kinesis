@@ -5,7 +5,10 @@ mod util;
 mod counter;
 mod simple;
 
-use component::ControllerRef;
+use component::{
+    fragment::{ElementKind, Fragment, Kind, Location, NodeOrReference, Piece},
+    ControllerRef,
+};
 
 use simple::Simple;
 use wasm_bindgen::prelude::*;
@@ -24,7 +27,17 @@ pub fn main() -> Result<(), JsValue> {
     // c.render()?;
 
     let c = ControllerRef::new(Simple::default(), &document);
-    c.render(&body.into())?;
+    // c.render(&body.into())?;
+
+    let mut fragment = Fragment::new(&document)
+        .with_piece(Piece::new(Kind::Element(ElementKind::P), Location::Target))
+        .with_piece(Piece::new(
+            Kind::Text("some content".into()),
+            Location::Append(NodeOrReference::Reference(0)),
+        ));
+
+    fragment.mount(&body.into(), None);
+    fragment.detach();
 
     Ok(())
 }

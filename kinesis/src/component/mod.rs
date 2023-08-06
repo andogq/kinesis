@@ -1,4 +1,5 @@
 mod controller;
+pub mod fragment;
 mod identifier;
 
 pub use controller::*;
