@@ -1,6 +1,6 @@
 use js_sys::Function;
 use wasm_bindgen::JsValue;
-use web_sys::{Document, Element, Node};
+use web_sys::{console, Document, Element, Node};
 
 use crate::component::Component;
 
@@ -72,10 +72,24 @@ where
         self: Box<Self>,
         _document: &Document,
         component: &dyn Component,
-        element: Option<RenderedNode>,
+        mut element: Option<RenderedNode>,
         _get_event_closure: &mut dyn FnMut(EventType) -> Function,
     ) -> Result<Option<DomNodeBuildResult>, JsValue> {
         let children = self.into_iter().collect::<Vec<_>>();
+
+        if children.is_empty() {
+            // Delete the element (?)
+            if let Some(element) = &element {
+                console::log_1(&"removing element".into());
+
+                let node = Node::from(element);
+                if let Some(parent) = node.parent_node() {
+                    parent.remove_child(&node);
+                }
+            }
+
+            element = None;
+        }
 
         Ok(if !children.is_empty() {
             Some(DomNodeBuildResult {

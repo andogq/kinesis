@@ -54,3 +54,13 @@ impl Display for Identifier {
         )
     }
 }
+
+impl IntoIterator for Identifier {
+    type Item = usize;
+
+    type IntoIter = std::vec::IntoIter<usize>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.clone().into_iter()
+    }
+}

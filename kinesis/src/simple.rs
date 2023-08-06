@@ -43,13 +43,11 @@ impl Component for Simple {
             RenderType::Partial(1) => {
                 console::log_1(&format!("rendering, {}", self.count % 2 == 0).into());
 
-                Some(if self.count % 2 == 0 {
-                    vec![Box::new(
+                Some(vec![Box::new((self.count % 2 == 0).then(|| {
+                    Box::new(
                         DomNode::h1().child(Box::new(Text::new("Even")) as Box<dyn Renderable>),
-                    ) as Box<dyn Renderable>]
-                } else {
-                    vec![]
-                })
+                    ) as Box<dyn Renderable>
+                })) as Box<dyn Renderable>])
             }
             _ => None,
         }

@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashSet, VecDeque},
     ops::Deref,
     rc::Rc,
 };
@@ -12,11 +12,10 @@ use web_sys::{console, Document, Element, Event, Node};
 use crate::{
     component::RenderType,
     dom::{
-        render_position::RenderPosition,
         renderable::{DynamicContent, RenderedNode},
         EventType,
     },
-    util::HashMapList,
+    util::{HashMapList, Tree},
 };
 
 use super::{Component, Identifier};
@@ -32,8 +31,8 @@ pub struct Controller {
     /// dependencies (key).
     dependencies: HashMapList<usize, (usize, Identifier)>,
 
-    /// Saves a reference to the created elements in a render, so they can be re-used.
-    rendered_elements: HashMap<RenderType, HashMap<Identifier, RenderedNode>>,
+    element_tree: Tree<usize, RenderedNode>,
+    previous_identifiers: HashSet<Identifier>,
 }
 
 impl Controller {
@@ -45,7 +44,8 @@ impl Controller {
             component: Rc::new(RefCell::new(component)) as Rc<RefCell<dyn Component>>,
             document: document.clone(),
             dependencies: HashMapList::new(),
-            rendered_elements: HashMap::new(),
+            element_tree: Tree::new(),
+            previous_identifiers: HashSet::new(),
         }
     }
 
@@ -118,8 +118,6 @@ impl Controller {
         let document = self.document.clone();
         let component = self.component.borrow();
 
-        console::log_1(&"hi".into());
-
         // Perform the initial render of the component, to retrieve all of the renderables
         if let Some(renderables) = component.render(render_type.clone()) {
             // Build a queue of renderables to render, it's identifier, and the parent element it
@@ -131,11 +129,10 @@ impl Controller {
                 .collect::<VecDeque<_>>();
 
             let mut used_element_identifiers = HashSet::new();
-            let rendered_elements = self.rendered_elements.entry(render_type).or_default();
 
             while let Some((identifier, renderable, parent)) = queue.pop_front() {
                 // Attempt to find element in the element cache
-                let element = rendered_elements.get(&identifier).cloned();
+                let element = self.element_tree.get(identifier.as_ref()).cloned();
 
                 console::log_1(
                     &format!(
@@ -193,7 +190,9 @@ impl Controller {
 
                     if let Some(element) = result.element {
                         // Save the element for future use
-                        rendered_elements.insert(identifier.clone(), element.clone());
+                        self.element_tree
+                            .insert(identifier.clone(), element.clone())
+                            .expect("to be able to insert item into tree");
                         used_element_identifiers.insert(identifier);
 
                         // Add the element to the parent
@@ -204,20 +203,50 @@ impl Controller {
                 }
             }
 
-            // Get rid of unused identifiers
-            rendered_elements
-                .keys()
-                .cloned()
-                .collect::<HashSet<_>>()
-                .difference(&used_element_identifiers)
-                .for_each(|key| {
-                    if let Some(element) = rendered_elements.remove(key) {
-                        let node = Node::from(&element);
+            // Get rid of unused elements from the render
+            // Somehow need to associate certain element instances with a render type. Once that
+            // render type completes, then remove any elements that were not used previously.
+
+            // TODO: Need to somehow seperate keys for each of the previous render types, but in a
+            // way that they can be related to each other (eg a Root render type that uses other
+            // partial render types).
+
+            if let Some(node) = self.element_tree.get_node(root_identifier.as_ref()) {
+                let mut to_remove = vec![];
+                let mut queue = vec![(root_identifier, node)];
+
+                // Traverse the tree from here and work out what wasn't altered
+                while let Some((identifier, node)) = queue.pop() {
+                    // Add children to queue
+                    queue.extend(node.children.0.iter_mut().map(|(id, node)| {
+                        let identifier = identifier.child(*id);
+                        (identifier, node)
+                    }));
+
+                    // See if element was rendered, and remove it if not
+                    if let (false, Some(node)) = (
+                        used_element_identifiers.contains(&identifier),
+                        node.value.as_ref(),
+                    ) {
+                        // Remove it from the DOM
+                        let node = Node::from(node);
                         if let Some(parent) = node.parent_node() {
-                            parent.remove_child(&node).ok();
+                            // Possible that parent could've already been removed
+                            parent.remove_child(&node);
                         }
+
+                        // Remove it from the tree
+                        to_remove.push(identifier);
                     }
-                });
+                }
+
+                for identifier in to_remove {
+                    self.element_tree.remove(identifier);
+                }
+            }
+
+            // Update the previous identifiers for the next render
+            self.previous_identifiers = used_element_identifiers;
         } else {
             console::log_1(&"nothing to render".into());
         }

@@ -9,7 +9,7 @@ pub use self::identifier::Identifier;
 use crate::dom::{renderable::Renderable, EventType};
 
 /// Possible render types when rendering a component.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum RenderType {
     /// Render the root portion of the component.
     Root,
