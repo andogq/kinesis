@@ -1,4 +1,8 @@
+use std::rc::Rc;
+
 use web_sys::{Document, Element, Node, Text};
+
+use crate::util::HashMapList;
 
 pub enum Kind {
     Text(String),
@@ -72,33 +76,45 @@ impl Piece {
     }
 }
 
-pub struct Fragment {
+/// Helper type for an updatable [Piece]. The closure will be called with the current context, and
+/// must return a piece to be rendered.
+pub type Updatable<Ctx> = dyn Fn(&Ctx) -> Piece;
+
+pub struct Fragment<C, Ctx> {
+    /// A closure, which must return a reference to the context.
+    get_context: C,
+
     document: Document,
 
     mounted: bool,
 
     pieces: Vec<(Piece, Option<Node>)>,
+
+    updates: HashMapList<usize, Rc<Updatable<Ctx>>>,
 }
 
-impl Fragment {
-    pub fn new(document: &Document) -> Self {
+impl<'ctx, C, Ctx> Fragment<C, Ctx>
+where
+    // `'ctx` lifetime defined as the lifetime of the `Ctx` type
+    Ctx: 'ctx,
+    // Get context closure must return a reference to the closure
+    C: Fn() -> &'ctx Ctx,
+{
+    pub fn new(document: &Document, get_context: C) -> Self {
         Self {
+            get_context,
+
             document: document.clone(),
             mounted: false,
             pieces: Vec::new(),
+
+            updates: HashMapList::new(),
         }
     }
 
     pub fn with_piece(mut self, piece: Piece) -> Self {
         // Create the accompanying node
-        let node = match &piece.kind {
-            Kind::Element(element_kind) => self
-                .document
-                .create_element(element_kind.into())
-                .expect("to create a new element")
-                .into(),
-            Kind::Text(text_content) => self.document.create_text_node(text_content).into(),
-        };
+        let node = self.make_node(&piece);
 
         self.pieces.push((piece, Some(node)));
 
@@ -118,39 +134,29 @@ impl Fragment {
 
     /// Mount the current fragment to the target.
     pub fn mount(&mut self, target: &Node, anchor: Option<&Node>) {
+        let context = (self.get_context)();
+
         // Prevent double mounting
         if self.mounted {
             return;
         }
 
+        // Mount static pieces
         for (piece, node) in self
             .pieces
             .iter()
             .filter_map(|(piece, node)| node.as_ref().map(|node| (piece, node)))
         {
             // Mount the node
-            match &piece.location {
-                Location::Target => {
-                    target
-                        .insert_before(node, anchor)
-                        .expect("to append child to target");
-                }
-                Location::Append(parent) => {
-                    self.as_node(parent)
-                        .expect("parent to be an existing node")
-                        .append_child(node)
-                        .expect("to append child to parent");
-                }
-                Location::Insert { parent, anchor } => {
-                    self.as_node(parent)
-                        .expect("parent to be an existing node")
-                        .insert_before(
-                            node,
-                            Some(self.as_node(anchor).expect("anchor to be an existing node")),
-                        )
-                        .expect("to insert child before anchor");
-                }
-            }
+            self.mount_piece(piece, node, target, anchor);
+        }
+
+        // Mount updatable pieces
+        for (_, updatable) in &self.updates {
+            let piece = updatable(context);
+            let node = self.make_node(&piece);
+
+            self.mount_piece(&piece, &node, target, anchor);
         }
 
         self.mounted = true;
@@ -181,15 +187,57 @@ impl Fragment {
 
         self.mounted = false;
     }
-}
 
-fn render(document: &Document, target: &Node) {
-    let mut fragment = Fragment::new(document)
-        .with_piece(Piece::new(Kind::Element(ElementKind::P), Location::Target))
-        .with_piece(Piece::new(
-            Kind::Text("some content".into()),
-            Location::Append(NodeOrReference::Reference(0)),
-        ));
+    pub fn with_updatable<F>(mut self, dependencies: &[usize], create: F) -> Self
+    where
+        F: Fn(&Ctx) -> Piece + 'static,
+    {
+        let create = Rc::new(create) as Rc<dyn Fn(&Ctx) -> Piece>;
+        for dependency in dependencies {
+            self.updates.insert(*dependency, Rc::clone(&create));
+        }
 
-    fragment.mount(target, None);
+        self
+    }
+
+    /// Update relevant parts of fragment in response to the state changing
+    pub fn update(&self, state: &C) {
+        todo!()
+    }
+
+    fn mount_piece(&self, piece: &Piece, node: &Node, target: &Node, anchor: Option<&Node>) {
+        match &piece.location {
+            Location::Target => {
+                target
+                    .insert_before(node, anchor)
+                    .expect("to append child to target");
+            }
+            Location::Append(parent) => {
+                self.as_node(parent)
+                    .expect("parent to be an existing node")
+                    .append_child(node)
+                    .expect("to append child to parent");
+            }
+            Location::Insert { parent, anchor } => {
+                self.as_node(parent)
+                    .expect("parent to be an existing node")
+                    .insert_before(
+                        node,
+                        Some(self.as_node(anchor).expect("anchor to be an existing node")),
+                    )
+                    .expect("to insert child before anchor");
+            }
+        }
+    }
+
+    fn make_node(&self, piece: &Piece) -> Node {
+        match &piece.kind {
+            Kind::Element(element_kind) => self
+                .document
+                .create_element(element_kind.into())
+                .expect("to create a new element")
+                .into(),
+            Kind::Text(text_content) => self.document.create_text_node(text_content).into(),
+        }
+    }
 }

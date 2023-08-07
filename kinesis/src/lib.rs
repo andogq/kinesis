@@ -29,15 +29,25 @@ pub fn main() -> Result<(), JsValue> {
     let c = ControllerRef::new(Simple::default(), &document);
     // c.render(&body.into())?;
 
-    let mut fragment = Fragment::new(&document)
+    struct Ctx {
+        count: usize,
+    }
+    let context = Ctx { count: 3 };
+
+    let mut fragment = Fragment::new(&document, || &context)
         .with_piece(Piece::new(Kind::Element(ElementKind::P), Location::Target))
         .with_piece(Piece::new(
-            Kind::Text("some content".into()),
+            Kind::Text("some content: ".into()),
             Location::Append(NodeOrReference::Reference(0)),
-        ));
+        ))
+        .with_updatable(&[0], |ctx| {
+            Piece::new(
+                Kind::Text(ctx.count.to_string()),
+                Location::Append(NodeOrReference::Reference(0)),
+            )
+        });
 
     fragment.mount(&body.into(), None);
-    fragment.detach();
 
     Ok(())
 }
