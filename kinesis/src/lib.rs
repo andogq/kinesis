@@ -12,7 +12,7 @@ use component::{
 
 use simple::Simple;
 use wasm_bindgen::prelude::*;
-use web_sys::{console, window};
+use web_sys::{console, window, Node};
 
 use crate::component::fragment::Updatable;
 
@@ -36,7 +36,7 @@ pub fn main() -> Result<(), JsValue> {
     }
     let mut context = Ctx { count: 3 };
 
-    let mut fragment = Fragment::new(&document, || &context)
+    let mut fragment = Fragment::new(&document)
         .with_piece(Piece::new(Kind::Element(ElementKind::P), Location::Target))
         .with_piece(Piece::new(
             Kind::Text("some content: ".into()),
@@ -50,13 +50,24 @@ pub fn main() -> Result<(), JsValue> {
             ),
         );
 
+    let body = Node::from(body);
+
     // Mount test component
-    fragment.mount(&body.into(), None);
+    fragment.mount(&context, &body, None);
 
     // Update state
     context.count = 5;
+    fragment.update(&[0], &context);
 
-    fragment.update(&[0]);
+    // Detach from DOM
+    fragment.detach();
+
+    // Update while detached
+    context.count = 10;
+    fragment.update(&[0], &context);
+
+    // Mount to DOM
+    fragment.mount(&context, &body, None);
 
     Ok(())
 }

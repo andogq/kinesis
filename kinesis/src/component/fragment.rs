@@ -94,10 +94,7 @@ impl<Ctx> Updatable<Ctx> {
     }
 }
 
-pub struct Fragment<C, Ctx> {
-    /// A closure, which must return a reference to the context.
-    get_context: C,
-
+pub struct Fragment<Ctx> {
     document: Document,
 
     mounted: bool,
@@ -108,17 +105,9 @@ pub struct Fragment<C, Ctx> {
     dependencies: HashMapList<usize, usize>,
 }
 
-impl<'ctx, C, Ctx> Fragment<C, Ctx>
-where
-    // `'ctx` lifetime defined as the lifetime of the `Ctx` type
-    Ctx: 'ctx,
-    // Get context closure must return a reference to the closure
-    C: Fn() -> &'ctx Ctx,
-{
-    pub fn new(document: &Document, get_context: C) -> Self {
+impl<Ctx> Fragment<Ctx> {
+    pub fn new(document: &Document) -> Self {
         Self {
-            get_context,
-
             document: document.clone(),
             mounted: false,
             pieces: Vec::new(),
@@ -147,9 +136,7 @@ where
     }
 
     /// Mount the current fragment to the target.
-    pub fn mount(&mut self, target: &Node, anchor: Option<&Node>) {
-        let context = (self.get_context)();
-
+    pub fn mount(&mut self, context: &Ctx, target: &Node, anchor: Option<&Node>) {
         // Prevent double mounting
         if self.mounted {
             return;
@@ -216,9 +203,7 @@ where
     }
 
     /// Update relevant parts of fragment in response to the state changing
-    pub fn update(&self, changed: &[usize]) {
-        let context = (self.get_context)();
-
+    pub fn update(&self, changed: &[usize], context: &Ctx) {
         for updatable_id in changed
             .iter()
             .flat_map(|dependency| self.dependencies.get(dependency))
