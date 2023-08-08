@@ -95,6 +95,31 @@ impl<Ctx> Updatable<Ctx> {
     }
 }
 
+pub type CheckConditionFn<Ctx> = Box<dyn Fn(&Ctx) -> bool>;
+pub struct Conditional<Ctx> {
+    check_condition: CheckConditionFn<Ctx>,
+    fragment: Fragment<Ctx>,
+    location: Location,
+}
+impl<Ctx> Conditional<Ctx> {
+    pub fn new<F>(location: Location, fragment: Fragment<Ctx>, check_condition: F) -> Self
+    where
+        F: 'static + Fn(&Ctx) -> bool,
+    {
+        Self {
+            check_condition: Box::new(check_condition) as CheckConditionFn<Ctx>,
+            fragment,
+            location,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum DependencyType {
+    Updatable(usize),
+    Conditional(usize),
+}
+
 pub struct Fragment<Ctx> {
     document: Document,
 
@@ -102,8 +127,9 @@ pub struct Fragment<Ctx> {
 
     pieces: Vec<(Piece, Node)>,
     updatables: Vec<(Updatable<Ctx>, Text)>,
+    conditionals: Vec<(Conditional<Ctx>, Node)>,
 
-    dependencies: HashMapList<usize, usize>,
+    dependencies: HashMapList<usize, DependencyType>,
 }
 
 impl<Ctx> Fragment<Ctx> {
@@ -111,9 +137,11 @@ impl<Ctx> Fragment<Ctx> {
         Self {
             document: document.clone(),
             mounted: false,
-            pieces: Vec::new(),
 
+            pieces: Vec::new(),
             updatables: Vec::new(),
+            conditionals: Vec::new(),
+
             dependencies: HashMapList::new(),
         }
     }
@@ -145,9 +173,28 @@ impl<Ctx> Fragment<Ctx> {
         // Insert into the updatables collection
         self.updatables.push((updatable, node));
 
-        for dependency in dependencies {
-            self.dependencies.insert(*dependency, updatable_id);
-        }
+        // Register the dependencies
+        self.register_dependencies(dependencies, DependencyType::Updatable(updatable_id));
+
+        self
+    }
+
+    pub fn with_conditional_fragment(
+        mut self,
+        dependencies: &[usize],
+        conditional: Conditional<Ctx>,
+    ) -> Self {
+        // Create the anchor node
+        let anchor = self.document.create_text_node("");
+
+        // Determine the conditional's ID
+        let conditional_id = self.conditionals.len();
+
+        // Insert into the conditionals collection
+        self.conditionals.push((conditional, anchor.into()));
+
+        // Register the dependencies
+        self.register_dependencies(dependencies, DependencyType::Conditional(conditional_id));
 
         self
     }
@@ -171,8 +218,23 @@ impl<Ctx> Fragment<Ctx> {
 
                 (text_node.as_ref(), &updatable.location)
             }))
+            .chain(self.conditionals.iter().map(|(conditional, anchor)| {
+                // Pass through the anchor nodes for the conditional fragments
+                (anchor, &conditional.location)
+            }))
         {
-            self.mount_node(node, location, target, anchor)
+            self.mount_node(node, location, target, anchor);
+        }
+
+        // Now that nodes have been mounted, attempt to mount conditionals
+        for (conditional, anchor) in self.conditionals.iter_mut() {
+            if (conditional.check_condition)(context) {
+                conditional.fragment.mount(
+                    context,
+                    &anchor.parent_node().expect("anchor to have parent"),
+                    Some(anchor),
+                );
+            }
         }
 
         self.mounted = true;
@@ -186,38 +248,86 @@ impl<Ctx> Fragment<Ctx> {
             return;
         }
 
-        // Find top level nodes
-        let top_level = self
+        for (node, _) in self
             .pieces
             .iter()
-            .filter(|(piece, _)| matches!(piece.location, Location::Target))
-            .map(|(_, node)| node);
-
-        // Remove each of them
-        for node in top_level {
+            .map(|(piece, node)| (node, &piece.location))
+            .chain(
+                self.updatables
+                    .iter()
+                    .map(|(updatable, node)| (node.as_ref(), &updatable.location)),
+            )
+            .chain(
+                self.conditionals
+                    .iter()
+                    .map(|(conditional, node)| (node, &conditional.location)),
+            )
+            // Select only top level nodes
+            .filter(|(_, location)| matches!(location, Location::Target))
+        {
             node.parent_node()
                 .expect("node to have parent before removal")
                 .remove_child(node)
                 .expect("to remove node from parent");
         }
 
+        // Trigger unmount for conditional fragments
+        for (conditional, _) in &mut self.conditionals {
+            conditional.fragment.detach();
+        }
+
         self.mounted = false;
     }
 
     /// Update relevant parts of fragment in response to the state changing
-    pub fn update(&self, changed: &[usize], context: &Ctx) {
-        for updatable_id in changed
+    pub fn update(&mut self, changed: &[usize], context: &Ctx) {
+        for dependency in changed
             .iter()
             .flat_map(|dependency| self.dependencies.get(dependency))
             .flatten()
         {
-            let (updatable, node) = self
-                .updatables
-                .get(*updatable_id)
-                .expect("valid updatable for given ID");
+            match dependency {
+                DependencyType::Updatable(updatable_id) => {
+                    let (updatable, node) = self
+                        .updatables
+                        .get(*updatable_id)
+                        .expect("valid updatable for given ID");
 
-            let text_content = updatable.get_text.as_ref()(context);
-            node.set_data(&text_content);
+                    let text_content = updatable.get_text.as_ref()(context);
+                    node.set_data(&text_content);
+                }
+                DependencyType::Conditional(conditional_id) => {
+                    if self.mounted {
+                        let (conditional, anchor) = self
+                            .conditionals
+                            .get_mut(*conditional_id)
+                            .expect("valid conditional for given ID");
+
+                        // Acquire current states
+                        let desired_state = (conditional.check_condition)(context);
+                        let actual_state = conditional.fragment.mounted;
+
+                        if desired_state != actual_state {
+                            if desired_state {
+                                conditional.fragment.mount(
+                                    context,
+                                    &anchor.parent_node().expect("anchor to have parent"),
+                                    Some(anchor),
+                                );
+                            } else {
+                                conditional.fragment.detach();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Register dependencies.
+    fn register_dependencies(&mut self, dependencies: &[usize], dependency_type: DependencyType) {
+        for dependency in dependencies {
+            self.dependencies.insert(*dependency, dependency_type);
         }
     }
 

@@ -14,7 +14,7 @@ use simple::Simple;
 use wasm_bindgen::prelude::*;
 use web_sys::{console, window, Node};
 
-use crate::component::fragment::Updatable;
+use crate::component::fragment::{Conditional, Updatable};
 
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {
@@ -48,6 +48,19 @@ pub fn main() -> Result<(), JsValue> {
                 Location::Append(NodeOrReference::Reference(0)),
                 |ctx: &Ctx| ctx.count.to_string(),
             ),
+        )
+        .with_conditional_fragment(
+            &[0],
+            Conditional::new(
+                Location::Target,
+                Fragment::new(&document)
+                    .with_piece(Piece::new(Kind::Element(ElementKind::P), Location::Target))
+                    .with_piece(Piece::new(
+                        Kind::Text("showing!".into()),
+                        Location::Append(NodeOrReference::Reference(0)),
+                    )),
+                |ctx| ctx.count % 2 == 0,
+            ),
         );
 
     let body = Node::from(body);
@@ -63,11 +76,14 @@ pub fn main() -> Result<(), JsValue> {
     fragment.detach();
 
     // Update while detached
-    context.count = 10;
+    context.count = 11;
     fragment.update(&[0], &context);
 
     // Mount to DOM
     fragment.mount(&context, &body, None);
+
+    context.count = 10;
+    fragment.update(&[0], &context);
 
     Ok(())
 }
