@@ -1,6 +1,4 @@
-use std::rc::Rc;
-
-use web_sys::{Document, Element, Node, Text};
+use web_sys::{Document, Node, Text};
 
 use crate::util::HashMapList;
 
@@ -76,9 +74,25 @@ impl Piece {
     }
 }
 
-/// Helper type for an updatable [Piece]. The closure will be called with the current context, and
-/// must return a piece to be rendered.
-pub type Updatable<Ctx> = dyn Fn(&Ctx) -> Piece;
+/// Helper type for updatable text. The closure will be called with the current context, and must
+/// return text to be placed within a text node to be rendered.
+pub type GetTextFn<Ctx> = Box<dyn Fn(&Ctx) -> String>;
+
+pub struct Updatable<Ctx> {
+    get_text: GetTextFn<Ctx>,
+    location: Location,
+}
+impl<Ctx> Updatable<Ctx> {
+    pub fn new<F>(location: Location, get_text: F) -> Self
+    where
+        F: 'static + Fn(&Ctx) -> String,
+    {
+        Self {
+            get_text: Box::new(get_text) as GetTextFn<Ctx>,
+            location,
+        }
+    }
+}
 
 pub struct Fragment<C, Ctx> {
     /// A closure, which must return a reference to the context.
@@ -88,9 +102,10 @@ pub struct Fragment<C, Ctx> {
 
     mounted: bool,
 
-    pieces: Vec<(Piece, Option<Node>)>,
+    pieces: Vec<(Piece, Node)>,
+    updatables: Vec<(Updatable<Ctx>, Text)>,
 
-    updates: HashMapList<usize, Rc<Updatable<Ctx>>>,
+    dependencies: HashMapList<usize, usize>,
 }
 
 impl<'ctx, C, Ctx> Fragment<C, Ctx>
@@ -108,7 +123,8 @@ where
             mounted: false,
             pieces: Vec::new(),
 
-            updates: HashMapList::new(),
+            updatables: Vec::new(),
+            dependencies: HashMapList::new(),
         }
     }
 
@@ -116,7 +132,7 @@ where
         // Create the accompanying node
         let node = self.make_node(&piece);
 
-        self.pieces.push((piece, Some(node)));
+        self.pieces.push((piece, node));
 
         self
     }
@@ -125,9 +141,7 @@ where
     fn as_node<'a>(&'a self, node_or_reference: &'a NodeOrReference) -> Option<&Node> {
         match node_or_reference {
             NodeOrReference::Node(node) => Some(node),
-            NodeOrReference::Reference(id) => {
-                self.pieces.get(*id).and_then(|(_, node)| node.as_ref())
-            }
+            NodeOrReference::Reference(id) => self.pieces.get(*id).map(|(_, node)| node),
             _ => None,
         }
     }
@@ -141,22 +155,18 @@ where
             return;
         }
 
-        // Mount static pieces
-        for (piece, node) in self
-            .pieces
-            .iter()
-            .filter_map(|(piece, node)| node.as_ref().map(|node| (piece, node)))
-        {
+        // Mount static pieces, filtering out nodes that don't have a created node
+        for (piece, node) in &self.pieces {
             // Mount the node
-            self.mount_piece(piece, node, target, anchor);
+            self.mount_node(&piece.location, node, target, anchor);
         }
 
         // Mount updatable pieces
-        for (_, updatable) in &self.updates {
-            let piece = updatable(context);
-            let node = self.make_node(&piece);
+        for (updatable, node) in &self.updatables {
+            let text_content = updatable.get_text.as_ref()(context);
+            node.set_data(&text_content);
 
-            self.mount_piece(&piece, &node, target, anchor);
+            self.mount_node(&updatable.location, node, target, anchor);
         }
 
         self.mounted = true;
@@ -175,7 +185,7 @@ where
             .pieces
             .iter()
             .filter(|(piece, _)| matches!(piece.location, Location::Target))
-            .filter_map(|(_, node)| node.as_ref());
+            .map(|(_, node)| node);
 
         // Remove each of them
         for node in top_level {
@@ -188,25 +198,44 @@ where
         self.mounted = false;
     }
 
-    pub fn with_updatable<F>(mut self, dependencies: &[usize], create: F) -> Self
-    where
-        F: Fn(&Ctx) -> Piece + 'static,
-    {
-        let create = Rc::new(create) as Rc<dyn Fn(&Ctx) -> Piece>;
+    pub fn with_updatable(mut self, dependencies: &[usize], updatable: Updatable<Ctx>) -> Self {
+        // Create the node
+        let node = self.document.create_text_node("");
+
+        // Determine the updatable's ID
+        let updatable_id = self.updatables.len();
+
+        // Insert into the updatables collection
+        self.updatables.push((updatable, node));
+
         for dependency in dependencies {
-            self.updates.insert(*dependency, Rc::clone(&create));
+            self.dependencies.insert(*dependency, updatable_id);
         }
 
         self
     }
 
     /// Update relevant parts of fragment in response to the state changing
-    pub fn update(&self, state: &C) {
-        todo!()
+    pub fn update(&self, changed: &[usize]) {
+        let context = (self.get_context)();
+
+        for updatable_id in changed
+            .iter()
+            .flat_map(|dependency| self.dependencies.get(dependency))
+            .flatten()
+        {
+            let (updatable, node) = self
+                .updatables
+                .get(*updatable_id)
+                .expect("valid updatable for given ID");
+
+            let text_content = updatable.get_text.as_ref()(context);
+            node.set_data(&text_content);
+        }
     }
 
-    fn mount_piece(&self, piece: &Piece, node: &Node, target: &Node, anchor: Option<&Node>) {
-        match &piece.location {
+    fn mount_node(&self, location: &Location, node: &Node, target: &Node, anchor: Option<&Node>) {
+        match location {
             Location::Target => {
                 target
                     .insert_before(node, anchor)

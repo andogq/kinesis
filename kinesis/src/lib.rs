@@ -14,6 +14,8 @@ use simple::Simple;
 use wasm_bindgen::prelude::*;
 use web_sys::{console, window};
 
+use crate::component::fragment::Updatable;
+
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {
     // Configure the panic hook to log to console.error
@@ -32,7 +34,7 @@ pub fn main() -> Result<(), JsValue> {
     struct Ctx {
         count: usize,
     }
-    let context = Ctx { count: 3 };
+    let mut context = Ctx { count: 3 };
 
     let mut fragment = Fragment::new(&document, || &context)
         .with_piece(Piece::new(Kind::Element(ElementKind::P), Location::Target))
@@ -40,14 +42,21 @@ pub fn main() -> Result<(), JsValue> {
             Kind::Text("some content: ".into()),
             Location::Append(NodeOrReference::Reference(0)),
         ))
-        .with_updatable(&[0], |ctx| {
-            Piece::new(
-                Kind::Text(ctx.count.to_string()),
+        .with_updatable(
+            &[0],
+            Updatable::new(
                 Location::Append(NodeOrReference::Reference(0)),
-            )
-        });
+                |ctx: &Ctx| ctx.count.to_string(),
+            ),
+        );
 
+    // Mount test component
     fragment.mount(&body.into(), None);
+
+    // Update state
+    context.count = 5;
+
+    fragment.update(&[0]);
 
     Ok(())
 }
