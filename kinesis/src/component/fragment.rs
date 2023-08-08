@@ -54,15 +54,6 @@ pub enum Location {
         anchor: NodeOrReference,
     },
 }
-impl Location {
-    pub fn append(parent: NodeOrReference) -> Self {
-        Self::Append(parent)
-    }
-
-    pub fn insert(parent: NodeOrReference, anchor: NodeOrReference) -> Self {
-        Self::Insert { parent, anchor }
-    }
-}
 
 pub struct Piece {
     kind: Kind,
@@ -71,6 +62,16 @@ pub struct Piece {
 impl Piece {
     pub fn new(kind: Kind, location: Location) -> Self {
         Self { kind, location }
+    }
+
+    pub fn create_node(&self, document: &Document) -> Node {
+        match &self.kind {
+            Kind::Element(element_kind) => document
+                .create_element(element_kind.into())
+                .expect("to create a new element")
+                .into(),
+            Kind::Text(text_content) => document.create_text_node(text_content).into(),
+        }
     }
 }
 
@@ -117,43 +118,61 @@ impl<Ctx> Fragment<Ctx> {
         }
     }
 
+    /// Inserts a [Piece] into the fragment, which can include text or an element.
     pub fn with_piece(mut self, piece: Piece) -> Self {
         // Create the accompanying node
-        let node = self.make_node(&piece);
+        let node = piece.create_node(&self.document);
 
         self.pieces.push((piece, node));
 
         self
     }
 
-    /// Resolve a node or reference to a node with the node cache.
-    fn as_node<'a>(&'a self, node_or_reference: &'a NodeOrReference) -> Option<&Node> {
-        match node_or_reference {
-            NodeOrReference::Node(node) => Some(node),
-            NodeOrReference::Reference(id) => self.pieces.get(*id).map(|(_, node)| node),
-            _ => None,
+    /// Inserts an [Updatable] piece of text into the fragment. The dependencies for the text
+    /// should be specified, so that when the dependencies change the text can be updated in the
+    /// DOM.
+    pub fn with_updatable_text(
+        mut self,
+        dependencies: &[usize],
+        updatable: Updatable<Ctx>,
+    ) -> Self {
+        // Create the node
+        let node = self.document.create_text_node("");
+
+        // Determine the updatable's ID
+        let updatable_id = self.updatables.len();
+
+        // Insert into the updatables collection
+        self.updatables.push((updatable, node));
+
+        for dependency in dependencies {
+            self.dependencies.insert(*dependency, updatable_id);
         }
+
+        self
     }
 
-    /// Mount the current fragment to the target.
+    /// Mount the current fragment to the specified target target.
     pub fn mount(&mut self, context: &Ctx, target: &Node, anchor: Option<&Node>) {
         // Prevent double mounting
         if self.mounted {
             return;
         }
 
-        // Mount static pieces, filtering out nodes that don't have a created node
-        for (piece, node) in &self.pieces {
-            // Mount the node
-            self.mount_node(&piece.location, node, target, anchor);
-        }
+        // Mount all of the parts of the fragment
+        for (node, location) in self
+            .pieces
+            .iter()
+            .map(|(piece, node)| (node, &piece.location))
+            .chain(self.updatables.iter().map(|(updatable, text_node)| {
+                // Update text content for updatable content
+                let text_content = updatable.get_text.as_ref()(context);
+                text_node.set_data(&text_content);
 
-        // Mount updatable pieces
-        for (updatable, node) in &self.updatables {
-            let text_content = updatable.get_text.as_ref()(context);
-            node.set_data(&text_content);
-
-            self.mount_node(&updatable.location, node, target, anchor);
+                (text_node.as_ref(), &updatable.location)
+            }))
+        {
+            self.mount_node(node, location, target, anchor)
         }
 
         self.mounted = true;
@@ -185,23 +204,6 @@ impl<Ctx> Fragment<Ctx> {
         self.mounted = false;
     }
 
-    pub fn with_updatable(mut self, dependencies: &[usize], updatable: Updatable<Ctx>) -> Self {
-        // Create the node
-        let node = self.document.create_text_node("");
-
-        // Determine the updatable's ID
-        let updatable_id = self.updatables.len();
-
-        // Insert into the updatables collection
-        self.updatables.push((updatable, node));
-
-        for dependency in dependencies {
-            self.dependencies.insert(*dependency, updatable_id);
-        }
-
-        self
-    }
-
     /// Update relevant parts of fragment in response to the state changing
     pub fn update(&self, changed: &[usize], context: &Ctx) {
         for updatable_id in changed
@@ -219,7 +221,17 @@ impl<Ctx> Fragment<Ctx> {
         }
     }
 
-    fn mount_node(&self, location: &Location, node: &Node, target: &Node, anchor: Option<&Node>) {
+    /// Resolve a node or reference to a node associated with a [Piece].
+    fn resolve_to_node<'a>(&'a self, node_or_reference: &'a NodeOrReference) -> Option<&Node> {
+        match node_or_reference {
+            NodeOrReference::Node(node) => Some(node),
+            NodeOrReference::Reference(id) => self.pieces.get(*id).map(|(_, node)| node),
+        }
+    }
+
+    /// Mounts a [Node] to the specified [Location]. The root target and anchor are included, for
+    /// when the node's location is [Location::Target].
+    fn mount_node(&self, node: &Node, location: &Location, target: &Node, anchor: Option<&Node>) {
         match location {
             Location::Target => {
                 target
@@ -227,31 +239,23 @@ impl<Ctx> Fragment<Ctx> {
                     .expect("to append child to target");
             }
             Location::Append(parent) => {
-                self.as_node(parent)
+                self.resolve_to_node(parent)
                     .expect("parent to be an existing node")
                     .append_child(node)
                     .expect("to append child to parent");
             }
             Location::Insert { parent, anchor } => {
-                self.as_node(parent)
+                self.resolve_to_node(parent)
                     .expect("parent to be an existing node")
                     .insert_before(
                         node,
-                        Some(self.as_node(anchor).expect("anchor to be an existing node")),
+                        Some(
+                            self.resolve_to_node(anchor)
+                                .expect("anchor to be an existing node"),
+                        ),
                     )
                     .expect("to insert child before anchor");
             }
-        }
-    }
-
-    fn make_node(&self, piece: &Piece) -> Node {
-        match &piece.kind {
-            Kind::Element(element_kind) => self
-                .document
-                .create_element(element_kind.into())
-                .expect("to create a new element")
-                .into(),
-            Kind::Text(text_content) => self.document.create_text_node(text_content).into(),
         }
     }
 }

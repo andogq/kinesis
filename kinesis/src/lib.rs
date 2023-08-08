@@ -42,7 +42,7 @@ pub fn main() -> Result<(), JsValue> {
             Kind::Text("some content: ".into()),
             Location::Append(NodeOrReference::Reference(0)),
         ))
-        .with_updatable(
+        .with_updatable_text(
             &[0],
             Updatable::new(
                 Location::Append(NodeOrReference::Reference(0)),
