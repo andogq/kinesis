@@ -50,16 +50,26 @@ pub enum NodeOrReference {
 }
 impl NodeOrReference {}
 
-pub enum Location {
-    /// Append the element to the parent. Corresponds to `appendChild` method.
-    Append(NodeOrReference),
+/// Insert the child to the parent before the specified anchor. Corresponds to `insertBefore`
+/// method.
+pub struct Location {
+    parent: NodeOrReference,
+    anchor: Option<NodeOrReference>,
+}
+impl Location {
+    pub fn append(parent: NodeOrReference) -> Self {
+        Self {
+            parent,
+            anchor: None,
+        }
+    }
 
-    /// Insert the child to the parent before the specified anchor. Corresponds to `insertBefore`
-    /// method.
-    Insert {
-        parent: NodeOrReference,
-        anchor: Option<NodeOrReference>,
-    },
+    pub fn insert(parent: NodeOrReference, anchor: NodeOrReference) -> Self {
+        Self {
+            parent,
+            anchor: Some(anchor),
+        }
+    }
 }
 
 pub struct Piece {
@@ -455,7 +465,7 @@ impl<Ctx> Fragment<Ctx> {
             return;
         }
 
-        let root_location = Location::Insert {
+        let root_location = Location {
             parent: NodeOrReference::Node(target.clone()),
             anchor: target_anchor.cloned().map(NodeOrReference::Node),
         };
@@ -646,26 +656,16 @@ impl<Ctx> Fragment<Ctx> {
     /// Mounts a [Node] to the specified [Location]. The root target and anchor are included, for
     /// when the node's location is [Location::Target].
     fn mount_node(&self, node: &Node, location: &Location) {
-        match location {
-            Location::Append(parent) => {
-                self.resolve_to_node(parent)
-                    .expect("parent to be an existing node")
-                    .append_child(node)
-                    .expect("to append child to parent");
-            }
-            Location::Insert { parent, anchor } => {
-                self.resolve_to_node(parent)
-                    .expect("parent to be an existing node")
-                    .insert_before(
-                        node,
-                        anchor.as_ref().map(|anchor| {
-                            self.resolve_to_node(anchor)
-                                .expect("anchor to be an existing node")
-                        }),
-                    )
-                    .expect("to insert child before anchor");
-            }
-        }
+        self.resolve_to_node(&location.parent)
+            .expect("parent to be an existing node")
+            .insert_before(
+                node,
+                location.anchor.as_ref().map(|anchor| {
+                    self.resolve_to_node(anchor)
+                        .expect("anchor to be an existing node")
+                }),
+            )
+            .expect("to insert child before anchor");
     }
 
     /// Create an anchor node. This is just a text node with no content.

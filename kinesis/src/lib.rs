@@ -40,11 +40,11 @@ pub fn main() -> Result<(), JsValue> {
         .with_piece(Kind::Element(ElementKind::P), None)
         .with_piece(
             Kind::Text("some content: ".into()),
-            Some(Location::Append(NodeOrReference::Reference(0))),
+            Some(Location::append(NodeOrReference::Reference(0))),
         )
         .with_updatable(
             &[0],
-            Some(Location::Append(NodeOrReference::Reference(0))),
+            Some(Location::append(NodeOrReference::Reference(0))),
             |ctx: &Ctx| ctx.count.to_string(),
         )
         .with_conditional(
@@ -54,7 +54,7 @@ pub fn main() -> Result<(), JsValue> {
                 .with_piece(Kind::Element(ElementKind::P), None)
                 .with_piece(
                     Kind::Text("showing!".into()),
-                    Some(Location::Append(NodeOrReference::Reference(0))),
+                    Some(Location::append(NodeOrReference::Reference(0))),
                 ),
             |ctx| ctx.count % 2 == 0,
         )
@@ -64,7 +64,7 @@ pub fn main() -> Result<(), JsValue> {
                     .with_piece(Kind::Element(ElementKind::P), None)
                     .with_piece(
                         Kind::Text(format!("counting {val}")),
-                        Some(Location::Append(NodeOrReference::Reference(0))),
+                        Some(Location::append(NodeOrReference::Reference(0))),
                     )
             })) as Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>
         })
