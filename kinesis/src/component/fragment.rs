@@ -1,4 +1,4 @@
-use web_sys::{Document, Node, Text};
+use web_sys::{console, Document, Node, Text};
 
 use crate::util::HashMapList;
 
@@ -118,12 +118,14 @@ pub type GetItemsFn<Ctx> = Box<dyn Fn(&Ctx) -> Box<dyn Iterator<Item = FragmentB
 pub struct Each<Ctx> {
     location: Location,
     get_items: GetItemsFn<Ctx>,
+    mounted_fragments: Option<Vec<Fragment<Ctx>>>,
 }
 
 #[derive(Clone, Copy)]
 enum DependencyType {
     Updatable(usize),
     Conditional(usize),
+    EachBlock(usize),
 }
 
 pub struct FragmentBuilder<Ctx> {
@@ -220,6 +222,10 @@ impl<Ctx> FragmentBuilder<Ctx> {
             );
         }
 
+        for (dependencies, location, get_items) in self.each_blocks {
+            fragment.with_each(&dependencies, location, get_items);
+        }
+
         fragment
     }
 }
@@ -232,7 +238,7 @@ pub struct Fragment<Ctx> {
     pieces: Vec<(Piece, Node)>,
     updatables: Vec<(Updatable<Ctx>, Text)>,
     conditionals: Vec<(Conditional<Ctx>, Node)>,
-    each_blocks: Vec<Each<Ctx>>,
+    each_blocks: Vec<(Each<Ctx>, Node)>,
 
     dependencies: HashMapList<usize, DependencyType>,
 }
@@ -321,6 +327,12 @@ impl<Ctx> Fragment<Ctx> {
         location: Location,
         get_items: GetItemsFn<Ctx>,
     ) {
+        let each = Each {
+            location,
+            get_items,
+            mounted_fragments: None,
+        };
+
         // Create an anchor for the each block
         let anchor = self.anchor();
 
@@ -328,12 +340,10 @@ impl<Ctx> Fragment<Ctx> {
         let each_block_id = self.each_blocks.len();
 
         // Insert the each block into the collection
-        self.each_blocks.push(Each {
-            location,
-            get_items,
-        });
+        self.each_blocks.push((each, anchor));
 
         // Register dependencies for the each block
+        self.register_dependencies(dependencies, DependencyType::EachBlock(each_block_id))
     }
 
     /// Mount the current fragment to the specified target target.
@@ -359,6 +369,11 @@ impl<Ctx> Fragment<Ctx> {
                 // Pass through the anchor nodes for the conditional fragments
                 (anchor, &conditional.location)
             }))
+            .chain(
+                self.each_blocks
+                    .iter()
+                    .map(|(each_block, anchor)| (anchor, &each_block.location)),
+            )
         {
             self.mount_node(node, location, target, anchor);
         }
@@ -372,6 +387,27 @@ impl<Ctx> Fragment<Ctx> {
                     Some(anchor),
                 );
             }
+        }
+
+        for (each_block, anchor) in &mut self.each_blocks {
+            // Create new fragments
+            let fragments = (each_block.get_items)(context)
+                .map(|fragment| {
+                    let mut fragment = fragment.build(&self.document);
+
+                    // Mount each of them
+                    fragment.mount(
+                        context,
+                        &anchor.parent_node().expect("anchor to have parent"),
+                        Some(anchor),
+                    );
+
+                    fragment
+                })
+                .collect();
+
+            // Save fragments
+            each_block.mounted_fragments = Some(fragments);
         }
 
         self.mounted = true;
@@ -399,6 +435,11 @@ impl<Ctx> Fragment<Ctx> {
                     .iter()
                     .map(|(conditional, node)| (node, &conditional.location)),
             )
+            .chain(
+                self.each_blocks
+                    .iter()
+                    .map(|(each_block, anchor)| (anchor, &each_block.location)),
+            )
             // Select only top level nodes
             .filter(|(_, location)| matches!(location, Location::Target))
         {
@@ -412,6 +453,13 @@ impl<Ctx> Fragment<Ctx> {
         for (conditional, _) in &mut self.conditionals {
             conditional.fragment.detach();
         }
+
+        // Trigger unmount for each blocks
+        self.each_blocks
+            .iter_mut()
+            .flat_map(|(each_block, _)| each_block.mounted_fragments.take())
+            .flatten()
+            .for_each(|mut fragment| fragment.detach());
 
         self.mounted = false;
     }
@@ -455,6 +503,46 @@ impl<Ctx> Fragment<Ctx> {
                                 conditional.fragment.detach();
                             }
                         }
+                    }
+                }
+                DependencyType::EachBlock(each_block_id) => {
+                    if self.mounted {
+                        let (each_block, anchor) = self
+                            .each_blocks
+                            .get_mut(*each_block_id)
+                            .expect("valid each block for given ID");
+
+                        if let Some(mounted_fragments) = each_block.mounted_fragments.take() {
+                            // Unmount existing fragments
+                            for mut mounted_fragment in mounted_fragments {
+                                mounted_fragment.detach();
+                            }
+                        }
+
+                        // Create new fragments
+                        let fragments = (each_block.get_items)(context)
+                            .map(|fragment| {
+                                let mut fragment = fragment.build(&self.document);
+
+                                // Mount each of them
+                                fragment.mount(
+                                    context,
+                                    &anchor.parent_node().expect("anchor to have parent"),
+                                    Some(anchor),
+                                );
+
+                                fragment
+                            })
+                            .collect();
+
+                        // Save fragments
+                        each_block.mounted_fragments = Some(fragments);
+
+                        // TODO: Should ideally be something like:
+                        // For each child
+                        // Check if child exists
+                        // If it does, call update and pass context
+                        // If it doesn't, create and mount it
                     }
                 }
             }
