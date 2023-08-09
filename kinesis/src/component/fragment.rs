@@ -51,10 +51,6 @@ pub enum NodeOrReference {
 impl NodeOrReference {}
 
 pub enum Location {
-    /// Insert the element to the target before the specified anchor. Shorthand for
-    /// [Location::Insert] with the render target as the parent.
-    Target,
-
     /// Append the element to the parent. Corresponds to `appendChild` method.
     Append(NodeOrReference),
 
@@ -62,12 +58,12 @@ pub enum Location {
     /// method.
     Insert {
         parent: NodeOrReference,
-        anchor: NodeOrReference,
+        anchor: Option<NodeOrReference>,
     },
 }
 
 pub struct Piece {
-    location: Location,
+    location: Option<Location>,
     node: Node,
 }
 impl Piece {}
@@ -78,7 +74,7 @@ pub type GetTextFn<Ctx> = Box<dyn Fn(&Ctx) -> String>;
 
 pub struct Updatable<Ctx> {
     get_text: GetTextFn<Ctx>,
-    location: Location,
+    location: Option<Location>,
 
     /// Reference to the text node that will be inserted and updated in the DOM
     text_node: Text,
@@ -115,7 +111,7 @@ pub type CheckConditionFn<Ctx> = Box<dyn Fn(&Ctx) -> bool>;
 pub struct Conditional<Ctx> {
     check_condition: CheckConditionFn<Ctx>,
     fragment: Fragment<Ctx>,
-    location: Location,
+    location: Option<Location>,
 
     /// Reference to the anchor for this fragment in the DOM
     anchor: Node,
@@ -160,7 +156,7 @@ impl<Ctx> Conditional<Ctx> {
 
 pub type GetItemsFn<Ctx> = Box<dyn Fn(&Ctx) -> Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>>;
 pub struct Each<Ctx> {
-    location: Location,
+    location: Option<Location>,
     get_items: GetItemsFn<Ctx>,
     mounted_fragments: Option<Vec<Fragment<Ctx>>>,
 
@@ -231,15 +227,15 @@ enum DependencyType {
 
 /// Used to build and represent a fragment that does not yet have access to the [Document].
 pub struct FragmentBuilder<Ctx> {
-    pieces: Vec<(Kind, Location)>,
-    updatables: Vec<(Vec<usize>, Location, GetTextFn<Ctx>)>,
+    pieces: Vec<(Kind, Option<Location>)>,
+    updatables: Vec<(Vec<usize>, Option<Location>, GetTextFn<Ctx>)>,
     conditionals: Vec<(
         Vec<usize>,
-        Location,
+        Option<Location>,
         FragmentBuilder<Ctx>,
         CheckConditionFn<Ctx>,
     )>,
-    each_blocks: Vec<(Vec<usize>, Location, GetItemsFn<Ctx>)>,
+    each_blocks: Vec<(Vec<usize>, Option<Location>, GetItemsFn<Ctx>)>,
 }
 impl<Ctx> FragmentBuilder<Ctx> {
     pub fn new() -> Self {
@@ -251,7 +247,7 @@ impl<Ctx> FragmentBuilder<Ctx> {
         }
     }
 
-    pub fn with_piece(mut self, kind: Kind, location: Location) -> Self {
+    pub fn with_piece(mut self, kind: Kind, location: Option<Location>) -> Self {
         self.pieces.push((kind, location));
         self
     }
@@ -259,7 +255,7 @@ impl<Ctx> FragmentBuilder<Ctx> {
     pub fn with_updatable<F>(
         mut self,
         dependencies: &[usize],
-        location: Location,
+        location: Option<Location>,
         get_text: F,
     ) -> Self
     where
@@ -276,7 +272,7 @@ impl<Ctx> FragmentBuilder<Ctx> {
     pub fn with_conditional<F>(
         mut self,
         dependencies: &[usize],
-        location: Location,
+        location: Option<Location>,
         fragment: FragmentBuilder<Ctx>,
         check_condition: F,
     ) -> Self
@@ -292,7 +288,12 @@ impl<Ctx> FragmentBuilder<Ctx> {
         self
     }
 
-    pub fn with_each<F>(mut self, dependencies: &[usize], location: Location, get_items: F) -> Self
+    pub fn with_each<F>(
+        mut self,
+        dependencies: &[usize],
+        location: Option<Location>,
+        get_items: F,
+    ) -> Self
     where
         F: 'static + Fn(&Ctx) -> Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>,
     {
@@ -365,7 +366,7 @@ impl<Ctx> Fragment<Ctx> {
     }
 
     /// Inserts a [Piece] into the fragment, which can include text or an element.
-    pub fn with_piece(&mut self, kind: Kind, location: Location) {
+    pub fn with_piece(&mut self, kind: Kind, location: Option<Location>) {
         let piece = Piece {
             location,
             node: kind.create_node(&self.document),
@@ -380,7 +381,7 @@ impl<Ctx> Fragment<Ctx> {
     pub fn with_updatable(
         &mut self,
         dependencies: &[usize],
-        location: Location,
+        location: Option<Location>,
         get_text: GetTextFn<Ctx>,
     ) {
         // Build the updatable
@@ -403,7 +404,7 @@ impl<Ctx> Fragment<Ctx> {
     pub fn with_conditional(
         &mut self,
         dependencies: &[usize],
-        location: Location,
+        location: Option<Location>,
         fragment: Fragment<Ctx>,
         check_condition: CheckConditionFn<Ctx>,
     ) {
@@ -427,7 +428,7 @@ impl<Ctx> Fragment<Ctx> {
     pub fn with_each(
         &mut self,
         dependencies: &[usize],
-        location: Location,
+        location: Option<Location>,
         get_items: GetItemsFn<Ctx>,
     ) {
         let each = Each {
@@ -448,11 +449,16 @@ impl<Ctx> Fragment<Ctx> {
     }
 
     /// Mount the current fragment to the specified target target.
-    pub fn mount(&mut self, context: &Ctx, target: &Node, anchor: Option<&Node>) {
+    pub fn mount(&mut self, context: &Ctx, target: &Node, target_anchor: Option<&Node>) {
         // Prevent double mounting
         if self.mounted {
             return;
         }
+
+        let root_location = Location::Insert {
+            parent: NodeOrReference::Node(target.clone()),
+            anchor: target_anchor.cloned().map(NodeOrReference::Node),
+        };
 
         // Mount all of the parts of the fragment
         for (node, location) in self
@@ -474,7 +480,7 @@ impl<Ctx> Fragment<Ctx> {
                     .map(|each_block| (&each_block.anchor, &each_block.location)),
             )
         {
-            self.mount_node(node, location, target, anchor);
+            self.mount_node(node, location.as_ref().unwrap_or(&root_location));
         }
 
         for updatable in &mut self.updatables {
@@ -539,7 +545,7 @@ impl<Ctx> Fragment<Ctx> {
                     .map(|each_block| (&each_block.anchor, &each_block.location)),
             )
             // Select only top level nodes
-            .filter(|(_, location)| matches!(location, Location::Target))
+            .filter(|(_, location)| location.is_none())
         {
             node.parent_node()
                 .expect("node to have parent before removal")
@@ -639,13 +645,8 @@ impl<Ctx> Fragment<Ctx> {
 
     /// Mounts a [Node] to the specified [Location]. The root target and anchor are included, for
     /// when the node's location is [Location::Target].
-    fn mount_node(&self, node: &Node, location: &Location, target: &Node, anchor: Option<&Node>) {
+    fn mount_node(&self, node: &Node, location: &Location) {
         match location {
-            Location::Target => {
-                target
-                    .insert_before(node, anchor)
-                    .expect("to append child to target");
-            }
             Location::Append(parent) => {
                 self.resolve_to_node(parent)
                     .expect("parent to be an existing node")
@@ -657,10 +658,10 @@ impl<Ctx> Fragment<Ctx> {
                     .expect("parent to be an existing node")
                     .insert_before(
                         node,
-                        Some(
+                        anchor.as_ref().map(|anchor| {
                             self.resolve_to_node(anchor)
-                                .expect("anchor to be an existing node"),
-                        ),
+                                .expect("anchor to be an existing node")
+                        }),
                     )
                     .expect("to insert child before anchor");
             }

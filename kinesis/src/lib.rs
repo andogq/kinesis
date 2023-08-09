@@ -37,34 +37,34 @@ pub fn main() -> Result<(), JsValue> {
     let mut context = Ctx { count: 3 };
 
     let mut fragment = Fragment::build()
-        .with_piece(Kind::Element(ElementKind::P), Location::Target)
+        .with_piece(Kind::Element(ElementKind::P), None)
         .with_piece(
             Kind::Text("some content: ".into()),
-            Location::Append(NodeOrReference::Reference(0)),
+            Some(Location::Append(NodeOrReference::Reference(0))),
         )
         .with_updatable(
             &[0],
-            Location::Append(NodeOrReference::Reference(0)),
+            Some(Location::Append(NodeOrReference::Reference(0))),
             |ctx: &Ctx| ctx.count.to_string(),
         )
         .with_conditional(
             &[0],
-            Location::Target,
+            None,
             Fragment::build()
-                .with_piece(Kind::Element(ElementKind::P), Location::Target)
+                .with_piece(Kind::Element(ElementKind::P), None)
                 .with_piece(
                     Kind::Text("showing!".into()),
-                    Location::Append(NodeOrReference::Reference(0)),
+                    Some(Location::Append(NodeOrReference::Reference(0))),
                 ),
             |ctx| ctx.count % 2 == 0,
         )
-        .with_each(&[0], Location::Target, |ctx| {
+        .with_each(&[0], None, |ctx| {
             Box::new((0..ctx.count).map(|val| {
                 Fragment::build()
-                    .with_piece(Kind::Element(ElementKind::P), Location::Target)
+                    .with_piece(Kind::Element(ElementKind::P), None)
                     .with_piece(
                         Kind::Text(format!("counting {val}")),
-                        Location::Append(NodeOrReference::Reference(0)),
+                        Some(Location::Append(NodeOrReference::Reference(0))),
                     )
             })) as Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>
         })
