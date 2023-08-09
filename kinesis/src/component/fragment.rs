@@ -67,7 +67,6 @@ pub enum Location {
 }
 
 pub struct Piece {
-    kind: Kind,
     location: Location,
     node: Node,
 }
@@ -80,6 +79,8 @@ pub type GetTextFn<Ctx> = Box<dyn Fn(&Ctx) -> String>;
 pub struct Updatable<Ctx> {
     get_text: GetTextFn<Ctx>,
     location: Location,
+
+    /// Reference to the text node that will be inserted and updated in the DOM
     text_node: Text,
 }
 impl<Ctx> Updatable<Ctx> {
@@ -115,6 +116,9 @@ pub struct Conditional<Ctx> {
     check_condition: CheckConditionFn<Ctx>,
     fragment: Fragment<Ctx>,
     location: Location,
+
+    /// Reference to the anchor for this fragment in the DOM
+    anchor: Node,
 }
 impl<Ctx> Conditional<Ctx> {
     pub fn mount(
@@ -159,6 +163,8 @@ pub struct Each<Ctx> {
     location: Location,
     get_items: GetItemsFn<Ctx>,
     mounted_fragments: Option<Vec<Fragment<Ctx>>>,
+
+    anchor: Node,
 }
 impl<Ctx> Each<Ctx> {
     /// Mounts all of the items. Internally calls `update` since the logic is the same.
@@ -223,6 +229,7 @@ enum DependencyType {
     EachBlock(usize),
 }
 
+/// Used to build and represent a fragment that does not yet have access to the [Document].
 pub struct FragmentBuilder<Ctx> {
     pieces: Vec<(Kind, Location)>,
     updatables: Vec<(Vec<usize>, Location, GetTextFn<Ctx>)>,
@@ -331,9 +338,9 @@ pub struct Fragment<Ctx> {
     mounted: bool,
 
     pieces: Vec<Piece>,
-    updatables: Vec<(Updatable<Ctx>, Text)>,
-    conditionals: Vec<(Conditional<Ctx>, Node)>,
-    each_blocks: Vec<(Each<Ctx>, Node)>,
+    updatables: Vec<Updatable<Ctx>>,
+    conditionals: Vec<Conditional<Ctx>>,
+    each_blocks: Vec<Each<Ctx>>,
 
     dependencies: HashMapList<usize, DependencyType>,
 }
@@ -359,11 +366,9 @@ impl<Ctx> Fragment<Ctx> {
 
     /// Inserts a [Piece] into the fragment, which can include text or an element.
     pub fn with_piece(&mut self, kind: Kind, location: Location) {
-        let node = kind.create_node(&self.document);
         let piece = Piece {
-            kind,
             location,
-            node,
+            node: kind.create_node(&self.document),
         };
 
         self.pieces.push(piece);
@@ -378,21 +383,18 @@ impl<Ctx> Fragment<Ctx> {
         location: Location,
         get_text: GetTextFn<Ctx>,
     ) {
-        // Create the node
-        let node = self.document.create_text_node("");
-
         // Build the updatable
         let updatable = Updatable {
             get_text,
             location,
-            text_node: node.clone(),
+            text_node: self.document.create_text_node(""),
         };
 
         // Determine the updatable's ID
         let updatable_id = self.updatables.len();
 
         // Insert into the updatables collection
-        self.updatables.push((updatable, node));
+        self.updatables.push(updatable);
 
         // Register the dependencies
         self.register_dependencies(dependencies, DependencyType::Updatable(updatable_id));
@@ -409,16 +411,14 @@ impl<Ctx> Fragment<Ctx> {
             check_condition,
             fragment,
             location,
+            anchor: self.anchor(),
         };
-
-        // Create the anchor node
-        let anchor = self.anchor();
 
         // Determine the conditional's ID
         let conditional_id = self.conditionals.len();
 
         // Insert into the conditionals collection
-        self.conditionals.push((conditional, anchor));
+        self.conditionals.push(conditional);
 
         // Register the dependencies
         self.register_dependencies(dependencies, DependencyType::Conditional(conditional_id));
@@ -434,16 +434,14 @@ impl<Ctx> Fragment<Ctx> {
             location,
             get_items,
             mounted_fragments: None,
+            anchor: self.anchor(),
         };
-
-        // Create an anchor for the each block
-        let anchor = self.anchor();
 
         // Determine the ID of the each block
         let each_block_id = self.each_blocks.len();
 
         // Insert the each block into the collection
-        self.each_blocks.push((each, anchor));
+        self.each_blocks.push(each);
 
         // Register dependencies for the each block
         self.register_dependencies(dependencies, DependencyType::EachBlock(each_block_id))
@@ -464,42 +462,49 @@ impl<Ctx> Fragment<Ctx> {
             .chain(
                 self.updatables
                     .iter()
-                    .map(|(updatable, text_node)| (text_node.as_ref(), &updatable.location)),
+                    .map(|updatable| (updatable.text_node.as_ref(), &updatable.location)),
             )
-            .chain(self.conditionals.iter().map(|(conditional, anchor)| {
+            .chain(self.conditionals.iter().map(|conditional| {
                 // Pass through the anchor nodes for the conditional fragments
-                (anchor, &conditional.location)
+                (&conditional.anchor, &conditional.location)
             }))
             .chain(
                 self.each_blocks
                     .iter()
-                    .map(|(each_block, anchor)| (anchor, &each_block.location)),
+                    .map(|each_block| (&each_block.anchor, &each_block.location)),
             )
         {
             self.mount_node(node, location, target, anchor);
         }
 
-        for (updatable, node) in &mut self.updatables {
+        for updatable in &mut self.updatables {
             // TODO: Don't really need this node as ref???
-            updatable.mount(&self.document, context, node.as_ref(), None);
+            updatable.mount(
+                &self.document,
+                context,
+                updatable.text_node.clone().as_ref(),
+                None,
+            );
         }
 
         // Now that nodes have been mounted, attempt to mount conditionals
-        for (conditional, anchor) in self.conditionals.iter_mut() {
+        for conditional in self.conditionals.iter_mut() {
+            let anchor = conditional.anchor.clone();
             conditional.mount(
                 &self.document,
                 context,
                 &anchor.parent_node().expect("anchor to have parent"),
-                Some(anchor),
+                Some(&anchor),
             );
         }
 
-        for (each_block, anchor) in &mut self.each_blocks {
+        for each_block in &mut self.each_blocks {
+            let anchor = each_block.anchor.clone();
             each_block.mount(
                 &self.document,
                 context,
                 &anchor.parent_node().expect("anchor to have parent"),
-                Some(anchor),
+                Some(&anchor),
             );
         }
 
@@ -521,17 +526,17 @@ impl<Ctx> Fragment<Ctx> {
             .chain(
                 self.updatables
                     .iter()
-                    .map(|(updatable, node)| (node.as_ref(), &updatable.location)),
+                    .map(|updatable| (updatable.text_node.as_ref(), &updatable.location)),
             )
             .chain(
                 self.conditionals
                     .iter()
-                    .map(|(conditional, node)| (node, &conditional.location)),
+                    .map(|conditional| (&conditional.anchor, &conditional.location)),
             )
             .chain(
                 self.each_blocks
                     .iter()
-                    .map(|(each_block, anchor)| (anchor, &each_block.location)),
+                    .map(|each_block| (&each_block.anchor, &each_block.location)),
             )
             // Select only top level nodes
             .filter(|(_, location)| matches!(location, Location::Target))
@@ -544,17 +549,17 @@ impl<Ctx> Fragment<Ctx> {
 
         self.updatables
             .iter_mut()
-            .for_each(|(updatable, _)| updatable.detach());
+            .for_each(|updatable| updatable.detach());
 
         // Trigger unmount for conditional fragments
         self.conditionals
             .iter_mut()
-            .for_each(|(conditional, _)| conditional.detach());
+            .for_each(|conditional| conditional.detach());
 
         // Trigger unmount for each blocks
         self.each_blocks
             .iter_mut()
-            .for_each(|(each_block, _)| each_block.detach());
+            .for_each(|each_block| each_block.detach());
 
         self.mounted = false;
     }
@@ -568,40 +573,48 @@ impl<Ctx> Fragment<Ctx> {
         {
             match dependency {
                 DependencyType::Updatable(updatable_id) => {
-                    let (updatable, node) = self
+                    let updatable = self
                         .updatables
                         .get_mut(*updatable_id)
                         .expect("valid updatable for given ID");
 
-                    updatable.update(&self.document, context, node.as_ref(), None);
+                    // TODO: Bad
+                    updatable.update(
+                        &self.document,
+                        context,
+                        updatable.text_node.clone().as_ref(),
+                        None,
+                    );
                 }
                 DependencyType::Conditional(conditional_id) => {
                     if self.mounted {
-                        let (conditional, anchor) = self
+                        let conditional = self
                             .conditionals
                             .get_mut(*conditional_id)
                             .expect("valid conditional for given ID");
 
+                        let anchor = conditional.anchor.clone();
                         conditional.update(
                             &self.document,
                             context,
                             &anchor.parent_node().expect("anchor to have parent"),
-                            Some(anchor),
+                            Some(&anchor),
                         );
                     }
                 }
                 DependencyType::EachBlock(each_block_id) => {
                     if self.mounted {
-                        let (each_block, anchor) = self
+                        let each_block = self
                             .each_blocks
                             .get_mut(*each_block_id)
                             .expect("valid each block for given ID");
 
+                        let anchor = each_block.anchor.clone();
                         each_block.update(
                             &self.document,
                             context,
                             &anchor.parent_node().expect("anchor to have parent"),
-                            Some(anchor),
+                            Some(&anchor),
                         );
                     }
                 }
