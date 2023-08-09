@@ -1,4 +1,4 @@
-use web_sys::{console, Document, Node, Text};
+use web_sys::{Document, Node, Text};
 
 use crate::util::HashMapList;
 
@@ -85,17 +85,6 @@ pub struct Updatable<Ctx> {
     text_node: Text,
 }
 impl<Ctx> Updatable<Ctx> {
-    pub fn new<F>(location: Location, get_text: F, text_node: Text) -> Self
-    where
-        F: 'static + Fn(&Ctx) -> String,
-    {
-        Self {
-            get_text: Box::new(get_text) as GetTextFn<Ctx>,
-            location,
-            text_node,
-        }
-    }
-
     pub fn mount(
         &mut self,
         document: &Document,
@@ -130,17 +119,6 @@ pub struct Conditional<Ctx> {
     location: Location,
 }
 impl<Ctx> Conditional<Ctx> {
-    pub fn new<F>(location: Location, fragment: Fragment<Ctx>, check_condition: F) -> Self
-    where
-        F: 'static + Fn(&Ctx) -> bool,
-    {
-        Self {
-            check_condition: Box::new(check_condition) as CheckConditionFn<Ctx>,
-            fragment,
-            location,
-        }
-    }
-
     pub fn mount(
         &mut self,
         _document: &Document,
@@ -561,6 +539,10 @@ impl<Ctx> Fragment<Ctx> {
                 .remove_child(node)
                 .expect("to remove node from parent");
         }
+
+        self.updatables
+            .iter_mut()
+            .for_each(|(updatable, _)| updatable.detach());
 
         // Trigger unmount for conditional fragments
         self.conditionals
