@@ -14,7 +14,7 @@ use simple::Simple;
 use wasm_bindgen::prelude::*;
 use web_sys::{console, window, Node};
 
-use crate::component::fragment::{Conditional, Updatable};
+use crate::component::fragment::{Conditional, FragmentBuilder, Updatable};
 
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {
@@ -36,32 +36,39 @@ pub fn main() -> Result<(), JsValue> {
     }
     let mut context = Ctx { count: 3 };
 
-    let mut fragment = Fragment::new(&document)
+    let mut fragment = Fragment::build()
         .with_piece(Piece::new(Kind::Element(ElementKind::P), Location::Target))
         .with_piece(Piece::new(
             Kind::Text("some content: ".into()),
             Location::Append(NodeOrReference::Reference(0)),
         ))
-        .with_updatable_text(
+        .with_updatable(
             &[0],
-            Updatable::new(
-                Location::Append(NodeOrReference::Reference(0)),
-                |ctx: &Ctx| ctx.count.to_string(),
-            ),
+            Location::Append(NodeOrReference::Reference(0)),
+            |ctx: &Ctx| ctx.count.to_string(),
         )
-        .with_conditional_fragment(
+        .with_conditional(
             &[0],
-            Conditional::new(
-                Location::Target,
-                Fragment::new(&document)
+            Location::Target,
+            Fragment::build()
+                .with_piece(Piece::new(Kind::Element(ElementKind::P), Location::Target))
+                .with_piece(Piece::new(
+                    Kind::Text("showing!".into()),
+                    Location::Append(NodeOrReference::Reference(0)),
+                )),
+            |ctx| ctx.count % 2 == 0,
+        )
+        .with_each(&[0], Location::Target, |ctx| {
+            Box::new((0..ctx.count).map(|val| {
+                Fragment::build()
                     .with_piece(Piece::new(Kind::Element(ElementKind::P), Location::Target))
                     .with_piece(Piece::new(
-                        Kind::Text("showing!".into()),
+                        Kind::Text(format!("counting {val}")),
                         Location::Append(NodeOrReference::Reference(0)),
-                    )),
-                |ctx| ctx.count % 2 == 0,
-            ),
-        );
+                    ))
+            })) as Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>
+        })
+        .build(&document);
 
     let body = Node::from(body);
 

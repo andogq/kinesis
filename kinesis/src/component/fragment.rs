@@ -114,10 +114,114 @@ impl<Ctx> Conditional<Ctx> {
     }
 }
 
+pub type GetItemsFn<Ctx> = Box<dyn Fn(&Ctx) -> Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>>;
+pub struct Each<Ctx> {
+    location: Location,
+    get_items: GetItemsFn<Ctx>,
+}
+
 #[derive(Clone, Copy)]
 enum DependencyType {
     Updatable(usize),
     Conditional(usize),
+}
+
+pub struct FragmentBuilder<Ctx> {
+    pieces: Vec<Piece>,
+    updatables: Vec<(Vec<usize>, Location, GetTextFn<Ctx>)>,
+    conditionals: Vec<(
+        Vec<usize>,
+        Location,
+        FragmentBuilder<Ctx>,
+        CheckConditionFn<Ctx>,
+    )>,
+    each_blocks: Vec<(Vec<usize>, Location, GetItemsFn<Ctx>)>,
+}
+impl<Ctx> FragmentBuilder<Ctx> {
+    pub fn new() -> Self {
+        Self {
+            pieces: Vec::new(),
+            updatables: Vec::new(),
+            conditionals: Vec::new(),
+            each_blocks: Vec::new(),
+        }
+    }
+
+    pub fn with_piece(mut self, piece: Piece) -> Self {
+        self.pieces.push(piece);
+        self
+    }
+
+    pub fn with_updatable<F>(
+        mut self,
+        dependencies: &[usize],
+        location: Location,
+        get_text: F,
+    ) -> Self
+    where
+        F: 'static + Fn(&Ctx) -> String,
+    {
+        self.updatables.push((
+            dependencies.to_vec(),
+            location,
+            Box::new(get_text) as GetTextFn<Ctx>,
+        ));
+        self
+    }
+
+    pub fn with_conditional<F>(
+        mut self,
+        dependencies: &[usize],
+        location: Location,
+        fragment: FragmentBuilder<Ctx>,
+        check_condition: F,
+    ) -> Self
+    where
+        F: 'static + Fn(&Ctx) -> bool,
+    {
+        self.conditionals.push((
+            dependencies.to_vec(),
+            location,
+            fragment,
+            Box::new(check_condition) as CheckConditionFn<Ctx>,
+        ));
+        self
+    }
+
+    pub fn with_each<F>(mut self, dependencies: &[usize], location: Location, get_items: F) -> Self
+    where
+        F: 'static + Fn(&Ctx) -> Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>,
+    {
+        self.each_blocks.push((
+            dependencies.to_vec(),
+            location,
+            Box::new(get_items) as GetItemsFn<Ctx>,
+        ));
+        self
+    }
+
+    pub fn build(self, document: &Document) -> Fragment<Ctx> {
+        let mut fragment = Fragment::new(document);
+
+        for piece in self.pieces {
+            fragment.with_piece(piece);
+        }
+
+        for (dependencies, location, get_text) in self.updatables {
+            fragment.with_updatable(&dependencies, location, get_text);
+        }
+
+        for (dependencies, location, fragment_builder, check_condition) in self.conditionals {
+            fragment.with_conditional(
+                &dependencies,
+                location,
+                fragment_builder.build(document),
+                check_condition,
+            );
+        }
+
+        fragment
+    }
 }
 
 pub struct Fragment<Ctx> {
@@ -128,11 +232,16 @@ pub struct Fragment<Ctx> {
     pieces: Vec<(Piece, Node)>,
     updatables: Vec<(Updatable<Ctx>, Text)>,
     conditionals: Vec<(Conditional<Ctx>, Node)>,
+    each_blocks: Vec<Each<Ctx>>,
 
     dependencies: HashMapList<usize, DependencyType>,
 }
 
 impl<Ctx> Fragment<Ctx> {
+    pub fn build() -> FragmentBuilder<Ctx> {
+        FragmentBuilder::new()
+    }
+
     pub fn new(document: &Document) -> Self {
         Self {
             document: document.clone(),
@@ -141,29 +250,32 @@ impl<Ctx> Fragment<Ctx> {
             pieces: Vec::new(),
             updatables: Vec::new(),
             conditionals: Vec::new(),
+            each_blocks: Vec::new(),
 
             dependencies: HashMapList::new(),
         }
     }
 
     /// Inserts a [Piece] into the fragment, which can include text or an element.
-    pub fn with_piece(mut self, piece: Piece) -> Self {
+    pub fn with_piece(&mut self, piece: Piece) {
         // Create the accompanying node
         let node = piece.create_node(&self.document);
 
         self.pieces.push((piece, node));
-
-        self
     }
 
     /// Inserts an [Updatable] piece of text into the fragment. The dependencies for the text
     /// should be specified, so that when the dependencies change the text can be updated in the
     /// DOM.
-    pub fn with_updatable_text(
-        mut self,
+    pub fn with_updatable(
+        &mut self,
         dependencies: &[usize],
-        updatable: Updatable<Ctx>,
-    ) -> Self {
+        location: Location,
+        get_text: GetTextFn<Ctx>,
+    ) {
+        // Build the updatable
+        let updatable = Updatable { get_text, location };
+
         // Create the node
         let node = self.document.create_text_node("");
 
@@ -175,28 +287,53 @@ impl<Ctx> Fragment<Ctx> {
 
         // Register the dependencies
         self.register_dependencies(dependencies, DependencyType::Updatable(updatable_id));
-
-        self
     }
 
-    pub fn with_conditional_fragment(
-        mut self,
+    pub fn with_conditional(
+        &mut self,
         dependencies: &[usize],
-        conditional: Conditional<Ctx>,
-    ) -> Self {
+        location: Location,
+        fragment: Fragment<Ctx>,
+        check_condition: CheckConditionFn<Ctx>,
+    ) {
+        let conditional = Conditional {
+            check_condition,
+            fragment,
+            location,
+        };
+
         // Create the anchor node
-        let anchor = self.document.create_text_node("");
+        let anchor = self.anchor();
 
         // Determine the conditional's ID
         let conditional_id = self.conditionals.len();
 
         // Insert into the conditionals collection
-        self.conditionals.push((conditional, anchor.into()));
+        self.conditionals.push((conditional, anchor));
 
         // Register the dependencies
         self.register_dependencies(dependencies, DependencyType::Conditional(conditional_id));
+    }
 
-        self
+    pub fn with_each(
+        &mut self,
+        dependencies: &[usize],
+        location: Location,
+        get_items: GetItemsFn<Ctx>,
+    ) {
+        // Create an anchor for the each block
+        let anchor = self.anchor();
+
+        // Determine the ID of the each block
+        let each_block_id = self.each_blocks.len();
+
+        // Insert the each block into the collection
+        self.each_blocks.push(Each {
+            location,
+            get_items,
+        });
+
+        // Register dependencies for the each block
     }
 
     /// Mount the current fragment to the specified target target.
@@ -367,5 +504,10 @@ impl<Ctx> Fragment<Ctx> {
                     .expect("to insert child before anchor");
             }
         }
+    }
+
+    /// Create an anchor node. This is just a text node with no content.
+    fn anchor(&self) -> Node {
+        self.document.create_text_node("").into()
     }
 }
