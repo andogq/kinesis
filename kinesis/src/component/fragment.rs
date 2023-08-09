@@ -6,6 +6,17 @@ pub enum Kind {
     Text(String),
     Element(ElementKind),
 }
+impl Kind {
+    pub fn create_node(&self, document: &Document) -> Node {
+        match &self {
+            Kind::Element(element_kind) => document
+                .create_element(element_kind.into())
+                .expect("to create a new element")
+                .into(),
+            Kind::Text(text_content) => document.create_text_node(text_content).into(),
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 pub enum ElementKind {
@@ -58,22 +69,9 @@ pub enum Location {
 pub struct Piece {
     kind: Kind,
     location: Location,
+    node: Node,
 }
-impl Piece {
-    pub fn new(kind: Kind, location: Location) -> Self {
-        Self { kind, location }
-    }
-
-    pub fn create_node(&self, document: &Document) -> Node {
-        match &self.kind {
-            Kind::Element(element_kind) => document
-                .create_element(element_kind.into())
-                .expect("to create a new element")
-                .into(),
-            Kind::Text(text_content) => document.create_text_node(text_content).into(),
-        }
-    }
-}
+impl Piece {}
 
 /// Helper type for updatable text. The closure will be called with the current context, and must
 /// return text to be placed within a text node to be rendered.
@@ -226,7 +224,7 @@ enum DependencyType {
 }
 
 pub struct FragmentBuilder<Ctx> {
-    pieces: Vec<Piece>,
+    pieces: Vec<(Kind, Location)>,
     updatables: Vec<(Vec<usize>, Location, GetTextFn<Ctx>)>,
     conditionals: Vec<(
         Vec<usize>,
@@ -246,8 +244,8 @@ impl<Ctx> FragmentBuilder<Ctx> {
         }
     }
 
-    pub fn with_piece(mut self, piece: Piece) -> Self {
-        self.pieces.push(piece);
+    pub fn with_piece(mut self, kind: Kind, location: Location) -> Self {
+        self.pieces.push((kind, location));
         self
     }
 
@@ -302,8 +300,8 @@ impl<Ctx> FragmentBuilder<Ctx> {
     pub fn build(self, document: &Document) -> Fragment<Ctx> {
         let mut fragment = Fragment::new(document);
 
-        for piece in self.pieces {
-            fragment.with_piece(piece);
+        for (kind, location) in self.pieces {
+            fragment.with_piece(kind, location);
         }
 
         for (dependencies, location, get_text) in self.updatables {
@@ -332,7 +330,7 @@ pub struct Fragment<Ctx> {
 
     mounted: bool,
 
-    pieces: Vec<(Piece, Node)>,
+    pieces: Vec<Piece>,
     updatables: Vec<(Updatable<Ctx>, Text)>,
     conditionals: Vec<(Conditional<Ctx>, Node)>,
     each_blocks: Vec<(Each<Ctx>, Node)>,
@@ -360,11 +358,15 @@ impl<Ctx> Fragment<Ctx> {
     }
 
     /// Inserts a [Piece] into the fragment, which can include text or an element.
-    pub fn with_piece(&mut self, piece: Piece) {
-        // Create the accompanying node
-        let node = piece.create_node(&self.document);
+    pub fn with_piece(&mut self, kind: Kind, location: Location) {
+        let node = kind.create_node(&self.document);
+        let piece = Piece {
+            kind,
+            location,
+            node,
+        };
 
-        self.pieces.push((piece, node));
+        self.pieces.push(piece);
     }
 
     /// Inserts an [Updatable] piece of text into the fragment. The dependencies for the text
@@ -458,7 +460,7 @@ impl<Ctx> Fragment<Ctx> {
         for (node, location) in self
             .pieces
             .iter()
-            .map(|(piece, node)| (node, &piece.location))
+            .map(|piece| (&piece.node, &piece.location))
             .chain(
                 self.updatables
                     .iter()
@@ -515,7 +517,7 @@ impl<Ctx> Fragment<Ctx> {
         for (node, _) in self
             .pieces
             .iter()
-            .map(|(piece, node)| (node, &piece.location))
+            .map(|piece| (&piece.node, &piece.location))
             .chain(
                 self.updatables
                     .iter()
@@ -618,7 +620,7 @@ impl<Ctx> Fragment<Ctx> {
     fn resolve_to_node<'a>(&'a self, node_or_reference: &'a NodeOrReference) -> Option<&Node> {
         match node_or_reference {
             NodeOrReference::Node(node) => Some(node),
-            NodeOrReference::Reference(id) => self.pieces.get(*id).map(|(_, node)| node),
+            NodeOrReference::Reference(id) => self.pieces.get(*id).map(|piece| &piece.node),
         }
     }
 
