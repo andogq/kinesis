@@ -6,15 +6,15 @@ mod counter;
 mod simple;
 
 use component::{
-    fragment::{ElementKind, Fragment, Kind, Location, NodeOrReference, Piece},
+    fragment::{ElementKind, Fragment, Kind},
     ControllerRef,
 };
 
 use simple::Simple;
 use wasm_bindgen::prelude::*;
-use web_sys::{console, window, Node};
+use web_sys::window;
 
-use crate::component::fragment::{Conditional, FragmentBuilder, Updatable};
+use crate::component::fragment::{FragmentBuilder, ResolvedLocation};
 
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {
@@ -38,59 +38,47 @@ pub fn main() -> Result<(), JsValue> {
 
     let mut fragment = Fragment::build()
         .with_piece(Kind::Element(ElementKind::P), None)
-        .with_piece(
-            Kind::Text("some content: ".into()),
-            Some(Location::append(NodeOrReference::Reference(0))),
-        )
-        .with_updatable(
-            &[0],
-            Some(Location::append(NodeOrReference::Reference(0))),
-            |ctx: &Ctx| ctx.count.to_string(),
-        )
+        .with_piece(Kind::Text("some content: ".into()), Some(0))
+        .with_updatable(&[0], Some(0), |ctx: &Ctx| ctx.count.to_string())
         .with_conditional(
             &[0],
             None,
             Fragment::build()
                 .with_piece(Kind::Element(ElementKind::P), None)
-                .with_piece(
-                    Kind::Text("showing!".into()),
-                    Some(Location::append(NodeOrReference::Reference(0))),
-                ),
+                .with_piece(Kind::Text("showing!".into()), Some(0)),
             |ctx| ctx.count % 2 == 0,
         )
         .with_each(&[0], None, |ctx| {
             Box::new((0..ctx.count).map(|val| {
                 Fragment::build()
                     .with_piece(Kind::Element(ElementKind::P), None)
-                    .with_piece(
-                        Kind::Text(format!("counting {val}")),
-                        Some(Location::append(NodeOrReference::Reference(0))),
-                    )
+                    .with_piece(Kind::Text(format!("counting {val}")), Some(0))
             })) as Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>
         })
         .build(&document);
 
-    let body = Node::from(body);
-
+    let body = ResolvedLocation::parent(body);
     // Mount test component
-    fragment.mount(&context, &body, None);
+    fragment.mount(&body);
+    fragment.full_update(&context);
 
     // Update state
     context.count = 5;
-    fragment.update(&[0], &context);
+    fragment.update(&context, &[0]);
 
     // Detach from DOM
-    fragment.detach();
+    fragment.detach(true);
 
     // Update while detached
     context.count = 11;
-    fragment.update(&[0], &context);
+    fragment.update(&context, &[0]);
 
     // Mount to DOM
-    fragment.mount(&context, &body, None);
+    fragment.mount(&body);
+    fragment.full_update(&context);
 
     context.count = 10;
-    fragment.update(&[0], &context);
+    fragment.update(&context, &[0]);
 
     Ok(())
 }
