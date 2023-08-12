@@ -8,7 +8,6 @@ mod simple;
 
 use std::{cell::RefCell, rc::Rc};
 
-use component::ControllerRef;
 use fragment::{Fragment, Node};
 
 use simple::Simple;
@@ -25,12 +24,6 @@ pub fn main() -> Result<(), JsValue> {
     let window = window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
     let body = document.body().expect("body to exist");
-
-    // let c = ComponentControllerRef::new(Counter::new(), &document, body.into());
-    // c.render()?;
-
-    let _c = ControllerRef::new(Simple::default(), &document);
-    // c.render(&body.into())?;
 
     struct Ctx {
         count: usize,

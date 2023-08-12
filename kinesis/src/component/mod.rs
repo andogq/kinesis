@@ -1,7 +1,5 @@
-mod controller;
 mod identifier;
 
-pub use controller::*;
 use web_sys::Event;
 
 pub use self::identifier::Identifier;
