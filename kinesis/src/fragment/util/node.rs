@@ -37,7 +37,7 @@ impl Node {
     pub fn create_node(&self, document: &Document) -> WsNode {
         match &self {
             Node::Element(element_kind) => document
-                .create_element(&element_kind)
+                .create_element(element_kind)
                 .expect("to create a new element")
                 .into(),
             Node::Text(text_content) => document.create_text_node(text_content).into(),

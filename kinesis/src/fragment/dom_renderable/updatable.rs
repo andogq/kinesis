@@ -44,7 +44,8 @@ where
             self.text_node
                 .parent_node()
                 .expect("node to have parent")
-                .remove_child(&self.text_node);
+                .remove_child(&self.text_node)
+                .expect("to remove child");
         }
     }
 }

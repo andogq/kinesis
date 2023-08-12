@@ -2,7 +2,7 @@ use web_sys::Event;
 
 use crate::{
     component::{Component, Identifier, RenderType},
-    dom::{dynamic::Dynamic, renderable::Renderable, text::Text, DomNode, EventType, TextContent},
+    dom::{dynamic::Dynamic, renderable::Renderable, text::Text, DomNode, EventType},
 };
 
 pub struct Counter {

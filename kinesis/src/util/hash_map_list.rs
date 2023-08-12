@@ -39,6 +39,15 @@ where
     }
 }
 
+impl<K, V> Default for HashMapList<K, V>
+where
+    K: Eq + PartialEq + Hash,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, V> IntoIterator for HashMapList<K, V>
 where
     K: Eq + PartialEq + Hash + Clone,

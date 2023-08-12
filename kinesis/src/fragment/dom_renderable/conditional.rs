@@ -72,7 +72,8 @@ where
         self.anchor
             .parent_node()
             .expect("node to have parent")
-            .remove_child(&self.anchor);
+            .remove_child(&self.anchor)
+            .expect("to remove child");
 
         if self.fragment_mounted {
             self.fragment.detach(top_level);

@@ -158,7 +158,8 @@ where
         self.static_nodes.iter().for_each(|(_, node)| {
             node.parent_node()
                 .expect("node to have parent")
-                .remove_child(node);
+                .remove_child(node)
+                .expect("to remove child");
         });
 
         self.renderables

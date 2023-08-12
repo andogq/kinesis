@@ -13,9 +13,9 @@ pub struct Simple {
 impl Component for Simple {
     fn handle_event(
         &mut self,
-        id: Identifier,
-        event_type: EventType,
-        event: Event,
+        _id: Identifier,
+        _event_type: EventType,
+        _event: Event,
     ) -> Option<Vec<usize>> {
         // WARN: Bad matching of event here, just for testing
         self.count += 1;
