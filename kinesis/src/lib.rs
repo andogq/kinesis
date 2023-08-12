@@ -1,20 +1,19 @@
 mod component;
 mod dom;
+mod fragment;
 mod util;
 
 mod counter;
 mod simple;
 
-use component::{
-    fragment::{ElementKind, Fragment, Kind},
-    ControllerRef,
-};
+use component::ControllerRef;
+use fragment::{Fragment, Node};
 
 use simple::Simple;
 use wasm_bindgen::prelude::*;
 use web_sys::window;
 
-use crate::component::fragment::{FragmentBuilder, ResolvedLocation};
+use crate::fragment::{DomRenderable, FragmentBuilder, Location};
 
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {
@@ -36,28 +35,29 @@ pub fn main() -> Result<(), JsValue> {
     }
     let mut context = Ctx { count: 3 };
 
-    let mut fragment = Fragment::build()
-        .with_piece(Kind::Element(ElementKind::P), None)
-        .with_piece(Kind::Text("some content: ".into()), Some(0))
+    let mut fragment = Fragment::<Ctx>::build()
+        .with_piece(Node::element("p"), None)
+        .with_piece(Node::text("some content: "), Some(0))
         .with_updatable(&[0], Some(0), |ctx: &Ctx| ctx.count.to_string())
         .with_conditional(
             &[0],
             None,
             Fragment::build()
-                .with_piece(Kind::Element(ElementKind::P), None)
-                .with_piece(Kind::Text("showing!".into()), Some(0)),
+                .with_piece(Node::element("p"), None)
+                .with_piece(Node::text("showing!"), Some(0)),
             |ctx| ctx.count % 2 == 0,
         )
         .with_each(&[0], None, |ctx| {
             Box::new((0..ctx.count).map(|val| {
                 Fragment::build()
-                    .with_piece(Kind::Element(ElementKind::P), None)
-                    .with_piece(Kind::Text(format!("counting {val}")), Some(0))
+                    .with_piece(Node::element("p"), None)
+                    .with_piece(Node::text(format!("counting {val}")), Some(0))
             })) as Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>
         })
         .build(&document);
 
-    let body = ResolvedLocation::parent(body);
+    let body = Location::parent(&body);
+
     // Mount test component
     fragment.mount(&body);
     fragment.full_update(&context);
