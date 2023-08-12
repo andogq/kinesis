@@ -1,5 +1,7 @@
+use std::rc::Rc;
+
 use super::DomRenderable;
-use crate::fragment::{Fragment, FragmentBuilder, Location};
+use crate::fragment::{Fragment, FragmentBuilder, Location, RegisterEventFn};
 use web_sys::{Document, Node as WsNode};
 
 /// A function that returns an [`Iterator`] of [`FragmentBuilder`]s, for the given context.
@@ -21,6 +23,9 @@ pub struct Each<Ctx> {
     /// A reference to an anchor within the DOM. Items within the iterator will be rendered at this
     /// location.
     anchor: WsNode,
+
+    /// A callback capable of passing events back up to the controller.
+    register_event: RegisterEventFn,
 }
 
 impl<Ctx> Each<Ctx>
@@ -29,12 +34,17 @@ where
 {
     /// Create a new each block with the provided `get_items` function. Requires a reference to
     /// [`Document`] in order to clone and store it for future use.
-    pub fn new(document: &Document, get_items: GetItemsFn<Ctx>) -> Self {
+    pub fn new(
+        document: &Document,
+        get_items: GetItemsFn<Ctx>,
+        register_event: RegisterEventFn,
+    ) -> Self {
         Self {
             document: document.clone(),
             get_items,
             mounted_fragments: None,
             anchor: document.create_text_node("").into(),
+            register_event,
         }
     }
 
@@ -65,7 +75,8 @@ where
         self.mounted_fragments = Some(
             (self.get_items)(context)
                 .map(|builder| {
-                    let mut fragment = builder.build(&self.document);
+                    let mut fragment =
+                        builder.build(&self.document, Rc::clone(&self.register_event));
 
                     fragment.mount(&Location::anchor(&self.anchor));
                     fragment.update(context, changed);

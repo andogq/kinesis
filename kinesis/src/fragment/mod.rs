@@ -2,11 +2,15 @@ mod builder;
 mod dom_renderable;
 mod util;
 
+use std::rc::Rc;
+
 use crate::util::HashMapList;
 pub use builder::*;
 pub use dom_renderable::DomRenderable;
 pub use util::*;
 use web_sys::{Document, Node as WsNode};
+
+pub type RegisterEventFn = Rc<dyn Fn(usize)>;
 
 /// A top level representation of a fragment. Can contain static data, conditional fragments and
 /// looped fragments. Is responsible for mounting/updating/detaching itself and all children.
@@ -30,6 +34,9 @@ pub struct Fragment<Ctx> {
 
     /// Whether the fragment is currently mounted or not.
     mounted: bool,
+
+    /// A callback function capable of propagating events up to the controller.
+    register_event: RegisterEventFn,
 }
 
 impl<Ctx> Fragment<Ctx>
@@ -43,7 +50,7 @@ where
 
     /// Create a new fragment. Requires a reference to [`Document`] in order to store for future
     /// usage, so that [`web_sys::Node`]s can be created as required.
-    pub fn new(document: &Document) -> Self {
+    pub fn new(document: &Document, register_event: RegisterEventFn) -> Self {
         Self {
             document: document.clone(),
 
@@ -54,12 +61,14 @@ where
             dependencies: HashMapList::new(),
 
             mounted: false,
+
+            register_event,
         }
     }
 
     /// Inserts a static node into the fragment.
     pub fn with_static_node(&mut self, kind: Node, location: Option<usize>) {
-        let piece = kind.create_node(&self.document);
+        let piece = kind.create_node(&self.document, Rc::clone(&self.register_event));
 
         self.static_nodes.push((location, piece));
     }

@@ -11,10 +11,7 @@ use web_sys::{console, Document};
 use crate::component::Component;
 
 pub use self::event::EventType;
-use self::{
-    render_position::RenderPosition,
-    renderable::{DomNodeBuildResult, DynamicContent, Renderable, RenderedNode},
-};
+use self::renderable::{DomNodeBuildResult, DynamicContent, Renderable, RenderedNode};
 
 #[derive(Clone, Copy)]
 pub enum DomElementKind {

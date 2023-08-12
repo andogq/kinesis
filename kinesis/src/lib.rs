@@ -6,12 +6,14 @@ mod util;
 mod counter;
 mod simple;
 
+use std::{cell::RefCell, rc::Rc};
+
 use component::ControllerRef;
 use fragment::{Fragment, Node};
 
 use simple::Simple;
 use wasm_bindgen::prelude::*;
-use web_sys::window;
+use web_sys::{console, window};
 
 use crate::fragment::{DomRenderable, FragmentBuilder, Location};
 
@@ -33,12 +35,16 @@ pub fn main() -> Result<(), JsValue> {
     struct Ctx {
         count: usize,
     }
-    let mut context = Ctx { count: 3 };
+    let mut context = Rc::new(RefCell::new(Ctx { count: 0 }));
+
+    let mut container: Rc<RefCell<Option<Fragment<Ctx>>>> = Rc::new(RefCell::new(None));
 
     let mut fragment = Fragment::<Ctx>::build()
         .with_piece(Node::element("p"), None)
         .with_piece(Node::text("some content: "), Some(0))
         .with_updatable(&[0], Some(0), |ctx: &Ctx| ctx.count.to_string())
+        .with_piece(Node::element("button").with_event("click", 0), None)
+        .with_piece(Node::text("click me"), Some(2))
         .with_conditional(
             &[0],
             None,
@@ -54,31 +60,37 @@ pub fn main() -> Result<(), JsValue> {
                     .with_piece(Node::text(format!("counting {val}")), Some(0))
             })) as Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>
         })
-        .build(&document);
+        .build(&document, {
+            let context = Rc::clone(&context);
+            let container = Rc::clone(&container);
 
-    let body = Location::parent(&body);
+            Rc::new(move |_| {
+                console::log_1(&"here".into());
 
-    // Mount test component
-    fragment.mount(&body);
-    fragment.full_update(&context);
+                // Mutate state
+                let mut context = context.borrow_mut();
+                context.count += 1;
 
-    // Update state
-    context.count = 5;
-    fragment.update(&context, &[0]);
+                // Trigger update
+                if let Some(fragment) = container.borrow_mut().as_mut() {
+                    fragment.update(&context, &[0]);
+                }
+            })
+        });
 
-    // Detach from DOM
-    fragment.detach(true);
+    {
+        // Perform inital mount
+        let context = context.borrow();
 
-    // Update while detached
-    context.count = 11;
-    fragment.update(&context, &[0]);
+        let body = Location::parent(&body);
 
-    // Mount to DOM
-    fragment.mount(&body);
-    fragment.full_update(&context);
+        // Mount test component
+        fragment.mount(&body);
+        fragment.full_update(&context);
+    }
 
-    context.count = 10;
-    fragment.update(&context, &[0]);
+    // Move fragment into container
+    *container.borrow_mut() = Some(fragment);
 
     Ok(())
 }

@@ -1,8 +1,10 @@
+use std::rc::Rc;
+
 use web_sys::Document;
 
 use super::{
     dom_renderable::{CheckConditionFn, Conditional, Each, GetItemsFn, GetTextFn, Updatable},
-    Fragment, Node,
+    Fragment, Node, RegisterEventFn,
 };
 
 /// Builder for a [`super::Piece`].
@@ -32,11 +34,11 @@ impl<Ctx> ConditionalBuilder<Ctx>
 where
     Ctx: 'static,
 {
-    pub fn build(self, document: &Document) -> Conditional<Ctx> {
+    pub fn build(self, document: &Document, register_event: RegisterEventFn) -> Conditional<Ctx> {
         Conditional::new(
             document,
             self.check_condition,
-            self.fragment_builder.build(document),
+            self.fragment_builder.build(document, register_event),
         )
     }
 }
@@ -50,8 +52,8 @@ impl<Ctx> EachBuilder<Ctx>
 where
     Ctx: 'static,
 {
-    pub fn build(self, document: &Document) -> Each<Ctx> {
-        Each::new(document, self.get_items)
+    pub fn build(self, document: &Document, register_event: RegisterEventFn) -> Each<Ctx> {
+        Each::new(document, self.get_items, register_event)
     }
 }
 
@@ -172,8 +174,8 @@ where
 
     /// Use the reference to [`Document`] to build all of the renderables within this fragment
     /// builder. Returns the constructed fragment.
-    pub fn build(self, document: &Document) -> Fragment<Ctx> {
-        let mut fragment = Fragment::new(document);
+    pub fn build(self, document: &Document, register_event: RegisterEventFn) -> Fragment<Ctx> {
+        let mut fragment = Fragment::new(document, Rc::clone(&register_event));
 
         self.pieces
             .into_iter()
@@ -195,7 +197,11 @@ where
                  location,
                  builder,
              }| {
-                fragment.with_renderable(builder.build(document), &dependencies, location);
+                fragment.with_renderable(
+                    builder.build(document, Rc::clone(&register_event)),
+                    &dependencies,
+                    location,
+                );
             },
         );
 
@@ -205,7 +211,11 @@ where
                  location,
                  builder,
              }| {
-                fragment.with_renderable(builder.build(document), &dependencies, location);
+                fragment.with_renderable(
+                    builder.build(document, Rc::clone(&register_event)),
+                    &dependencies,
+                    location,
+                );
             },
         );
 

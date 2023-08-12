@@ -15,7 +15,9 @@ where
     Ctx: 'static,
 {
     /// Mount self to the DOM as described by `location`. It is guarenteed that this method will
-    /// only be called if not currently mounted, so this does not need to be checked.
+    /// only be called if not currently mounted, so this does not need to be checked. It also
+    /// contains a `register_event` function, which can be used to propagate events back up to the
+    /// controller.
     fn mount(&mut self, location: &Location);
 
     /// Update self due to a state change. Identifiers corresponding to the changed fields will be
