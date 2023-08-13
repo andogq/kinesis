@@ -67,9 +67,9 @@ where
 
     /// Inserts a static node into the fragment.
     pub fn with_static_node(&mut self, kind: Node, location: Option<usize>) {
-        let piece = kind.create_node(&self.document, &self.event_registry);
+        let node = kind.create_node(&self.document, &self.event_registry);
 
-        self.static_nodes.push((location, piece));
+        self.static_nodes.push((location, node));
     }
 
     /// Inserts a dynamic [`DomRenderable`] into the fragment.

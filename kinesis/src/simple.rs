@@ -36,24 +36,24 @@ impl Component for Simple {
 
     fn render(&self) -> FragmentBuilder<Self::Ctx> {
         Fragment::build()
-            .with_piece(Node::element("p"), None)
-            .with_piece(Node::text("some content: "), Some(0))
+            .with_node(Node::element("p"), None)
+            .with_node(Node::text("some content: "), Some(0))
             .with_iter(&[0], Some(0), |ctx: &Self::Ctx| {
                 Box::new(iter::once(
-                    FragmentBuilder::new().with_piece(Node::text(ctx.count.to_string()), None),
+                    FragmentBuilder::new().with_node(Node::text(ctx.count.to_string()), None),
                 )) as Box<dyn Iterator<Item = FragmentBuilder<Self::Ctx>>>
             })
-            .with_piece(Node::element("button").with_event("click", 0), None)
-            .with_piece(Node::text("decrement"), Some(2))
-            .with_piece(Node::element("button").with_event("click", 1), None)
-            .with_piece(Node::text("increment"), Some(4))
+            .with_node(Node::element("button").with_event("click", 0), None)
+            .with_node(Node::text("decrement"), Some(2))
+            .with_node(Node::element("button").with_event("click", 1), None)
+            .with_node(Node::text("increment"), Some(4))
             .with_iter(&[0], None, |ctx| {
                 Box::new(
                     (ctx.count % 2 == 0)
                         .then(|| {
                             Fragment::build()
-                                .with_piece(Node::element("p"), None)
-                                .with_piece(Node::text("showing!"), Some(0))
+                                .with_node(Node::element("p"), None)
+                                .with_node(Node::text("showing!"), Some(0))
                         })
                         .into_iter(),
                 )
@@ -61,8 +61,8 @@ impl Component for Simple {
             .with_iter(&[0], None, |ctx| {
                 Box::new((0..ctx.count).map(|val| {
                     Fragment::build()
-                        .with_piece(Node::element("p"), None)
-                        .with_piece(Node::text(format!("counting {val}")), Some(0))
+                        .with_node(Node::element("p"), None)
+                        .with_node(Node::text(format!("counting {val}")), Some(0))
                 })) as Box<dyn Iterator<Item = FragmentBuilder<Self::Ctx>>>
             })
     }

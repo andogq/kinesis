@@ -7,9 +7,9 @@ use super::{
     EventRegistry, Fragment, Node,
 };
 
-/// Builder for a [`super::Piece`].
-pub struct PieceBuilder {
-    kind: Node,
+/// Builder for a [`super::Node`].
+pub struct NodeBuilder {
+    node: Node,
     location: Option<usize>,
 }
 
@@ -58,7 +58,7 @@ impl<T> Builder<T> {
 /// Used to build and represent a [`Fragment`] that does not yet have access to the [Document].
 /// Contains a collection of each of the possible builders.
 pub struct FragmentBuilder<Ctx> {
-    pieces: Vec<PieceBuilder>,
+    nodes: Vec<NodeBuilder>,
     iterators: Vec<Builder<IteratorBuilder<Ctx>>>,
 }
 
@@ -69,14 +69,14 @@ where
     /// Create a new, empty instance.
     pub fn new() -> Self {
         Self {
-            pieces: Vec::new(),
+            nodes: Vec::new(),
             iterators: Vec::new(),
         }
     }
 
-    /// Add a [`PieceBuilder`] to the builder.
-    pub fn with_piece(mut self, kind: Node, location: Option<usize>) -> Self {
-        self.pieces.push(PieceBuilder { kind, location });
+    /// Add a [`NodeBuilder`] to the builder.
+    pub fn with_node(mut self, node: Node, location: Option<usize>) -> Self {
+        self.nodes.push(NodeBuilder { node, location });
         self
     }
 
@@ -109,9 +109,9 @@ where
     ) -> Fragment<Ctx> {
         let mut fragment = Fragment::new(document, event_registry);
 
-        self.pieces
+        self.nodes
             .into_iter()
-            .for_each(|PieceBuilder { kind, location }| fragment.with_static_node(kind, location));
+            .for_each(|NodeBuilder { node, location }| fragment.with_static_node(node, location));
 
         self.iterators.into_iter().for_each(
             |Builder {
