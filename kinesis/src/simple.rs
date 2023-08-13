@@ -38,10 +38,8 @@ impl Component for Simple {
         Fragment::build()
             .with_node(Node::element("p"), None)
             .with_node(Node::text("some content: "), Some(0))
-            .with_iter(&[0], Some(0), |ctx: &Self::Ctx| {
-                Box::new(iter::once(
-                    FragmentBuilder::new().with_node(Node::text(ctx.count.to_string()), None),
-                )) as Box<dyn Iterator<Item = FragmentBuilder<Self::Ctx>>>
+            .with_updatable(&[0], Some(0), |ctx: &Self::Ctx| {
+                Fragment::build().with_node(Node::text(ctx.count.to_string()), None)
             })
             .with_node(Node::element("button").with_event("click", 0), None)
             .with_node(Node::text("decrement"), Some(2))

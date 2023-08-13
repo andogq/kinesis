@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, iter, rc::Rc};
 
 use web_sys::Document;
 
@@ -95,6 +95,28 @@ where
             location,
             IteratorBuilder {
                 get_items: Box::new(get_items) as GetIterFn<Ctx>,
+            },
+        ));
+        self
+    }
+
+    /// Helper function to create an 'updatable' fragment, meaning a fragment that is re-rendered
+    /// whenever a dependency changes. This creates an [`iter::Iterator`], as with
+    /// [`Self::with_iter()`].
+    pub fn with_updatable<F>(
+        mut self,
+        dependencies: &[usize],
+        location: Option<usize>,
+        get_fragment: F,
+    ) -> Self
+    where
+        F: 'static + Fn(&Ctx) -> FragmentBuilder<Ctx>,
+    {
+        self.iterators.push(Builder::new(
+            dependencies,
+            location,
+            IteratorBuilder {
+                get_items: Box::new(move |ctx| Box::new(iter::once(get_fragment(ctx)))),
             },
         ));
         self
