@@ -1,3 +1,5 @@
+use std::iter;
+
 use crate::{
     component::Component,
     fragment::{Fragment, FragmentBuilder, Node},
@@ -36,7 +38,11 @@ impl Component for Simple {
         Fragment::build()
             .with_piece(Node::element("p"), None)
             .with_piece(Node::text("some content: "), Some(0))
-            .with_updatable(&[0], Some(0), |ctx: &Simple| ctx.count.to_string())
+            .with_iter(&[0], Some(0), |ctx: &Self::Ctx| {
+                Box::new(iter::once(
+                    FragmentBuilder::new().with_piece(Node::text(ctx.count.to_string()), None),
+                )) as Box<dyn Iterator<Item = FragmentBuilder<Self::Ctx>>>
+            })
             .with_piece(Node::element("button").with_event("click", 0), None)
             .with_piece(Node::text("decrement"), Some(2))
             .with_piece(Node::element("button").with_event("click", 1), None)
