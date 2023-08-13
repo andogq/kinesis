@@ -4,7 +4,7 @@ use web_sys::Document;
 
 use super::{
     dom_renderable::{CheckConditionFn, Conditional, Each, GetItemsFn, GetTextFn, Updatable},
-    event_registry, EventRegistry, Fragment, Node, RegisterEventFn,
+    EventRegistry, Fragment, Node,
 };
 
 /// Builder for a [`super::Piece`].

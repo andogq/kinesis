@@ -12,8 +12,6 @@ pub use event_registry::EventRegistry;
 pub use util::*;
 use web_sys::{Document, Node as WsNode};
 
-pub type RegisterEventFn = Rc<dyn Fn(usize)>;
-
 /// A top level representation of a fragment. Can contain static data, conditional fragments and
 /// looped fragments. Is responsible for mounting/updating/detaching itself and all children.
 /// Importantly, it will only contain static nodes, meaning that there are no variable nodes

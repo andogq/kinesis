@@ -1,10 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
-use js_sys::Function;
-use wasm_bindgen::{prelude::Closure, JsCast};
-use web_sys::{Document, Event, Node as WsNode};
+use web_sys::{Document, Node as WsNode};
 
-use crate::fragment::{EventRegistry, RegisterEventFn};
+use crate::fragment::EventRegistry;
 
 /// Information required to build a [`web_sys::Node`]. Offers a friendly interface for creating new
 /// [`web_sys::Node`]s, and allows for programatic access to certain attributes before creation

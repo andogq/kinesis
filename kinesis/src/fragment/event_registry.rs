@@ -1,8 +1,9 @@
-use super::RegisterEventFn;
 use js_sys::Function;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::{console, Event};
+
+pub type RegisterEventFn = Rc<dyn Fn(usize, Event)>;
 
 /// A registry of [`js_sys::Function`]s, caching created closures for a given event id.
 pub struct EventRegistry {
@@ -18,7 +19,7 @@ impl EventRegistry {
     /// Create a new registry, returning a shared reference.
     pub fn new<F>(register_event: F) -> Rc<RefCell<Self>>
     where
-        F: 'static + Fn(usize),
+        F: 'static + Fn(usize, Event),
     {
         Rc::new(RefCell::new(Self {
             closures: HashMap::new(),
@@ -32,7 +33,7 @@ impl EventRegistry {
             let register_event = Rc::clone(&self.register_event);
             console::log_1(&"creating event".into());
             Closure::<dyn Fn(Event)>::new(move |event| {
-                register_event(event_id);
+                register_event(event_id, event);
             })
             .into_js_value()
             .unchecked_into()

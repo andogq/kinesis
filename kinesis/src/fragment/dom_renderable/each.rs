@@ -1,9 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::DomRenderable;
-use crate::fragment::{
-    event_registry, EventRegistry, Fragment, FragmentBuilder, Location, RegisterEventFn,
-};
+use crate::fragment::{EventRegistry, Fragment, FragmentBuilder, Location};
 use web_sys::{Document, Node as WsNode};
 
 /// A function that returns an [`Iterator`] of [`FragmentBuilder`]s, for the given context.

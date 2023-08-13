@@ -1,7 +1,7 @@
 use super::Component;
 use crate::fragment::{DomRenderable, EventRegistry, Fragment, Location};
 use std::{cell::RefCell, ops::Deref, rc::Rc};
-use web_sys::{console, Document};
+use web_sys::Document;
 
 /// A component controller, responsible for controlling the top level [`Fragment`] for a component,
 /// in addition to the initial mount and update, and passing of updates from events into the
@@ -45,12 +45,10 @@ where
             let controller_reference = Rc::clone(&controller_reference);
             let component = Rc::clone(&component);
 
-            move |event_id| {
-                console::log_1(&"in registry".into());
-
+            move |event_id, event| {
                 // Perform a callback on the component
                 let mut component = component.borrow_mut();
-                let Some(changed) = component.handle_event(event_id) else {return};
+                let Some(changed) = component.handle_event(event_id, event) else { return };
 
                 // Need to trigger an update on the fragment
                 if let Some(controller) = controller_reference.borrow().as_ref() {

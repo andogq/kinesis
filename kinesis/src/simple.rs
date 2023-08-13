@@ -2,6 +2,7 @@ use crate::{
     component::Component,
     fragment::{Fragment, FragmentBuilder, Node},
 };
+use web_sys::Event;
 
 #[derive(Default)]
 pub struct Simple {
@@ -17,7 +18,7 @@ impl Simple {
 impl Component for Simple {
     type Ctx = Self;
 
-    fn handle_event(&mut self, event_id: usize) -> Option<Vec<usize>> {
+    fn handle_event(&mut self, event_id: usize, event: Event) -> Option<Vec<usize>> {
         match event_id {
             0 => {
                 self.count -= 1;

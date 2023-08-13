@@ -4,16 +4,12 @@ mod util;
 
 mod simple;
 
-use std::{cell::RefCell, rc::Rc};
-
 use component::Controller;
-use fragment::{Fragment, Node};
-
 use simple::Simple;
 use wasm_bindgen::prelude::*;
-use web_sys::{console, window};
+use web_sys::window;
 
-use crate::fragment::{DomRenderable, FragmentBuilder, Location};
+use crate::fragment::Location;
 
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {
