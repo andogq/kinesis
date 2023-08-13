@@ -1,14 +1,19 @@
 mod component;
-mod dom;
+mod fragment;
 mod util;
 
-mod counter;
+mod simple;
 
-use component::ComponentControllerRef;
-use counter::Counter;
+use std::{cell::RefCell, rc::Rc};
 
+use component::Controller;
+use fragment::{Fragment, Node};
+
+use simple::Simple;
 use wasm_bindgen::prelude::*;
-use web_sys::window;
+use web_sys::{console, window};
+
+use crate::fragment::{DomRenderable, FragmentBuilder, Location};
 
 #[wasm_bindgen(start)]
 pub fn main() -> Result<(), JsValue> {
@@ -19,9 +24,8 @@ pub fn main() -> Result<(), JsValue> {
     let document = window.document().expect("should have a document on window");
     let body = document.body().expect("body to exist");
 
-    let c = ComponentControllerRef::new(Counter::new(), &document, body.into());
-
-    c.render()?;
+    let component = Controller::new(&document, Simple::new());
+    component.borrow_mut().mount(&Location::parent(&body));
 
     Ok(())
 }

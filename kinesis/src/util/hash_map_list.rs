@@ -33,6 +33,19 @@ where
     pub fn iter(&self) -> Iter<'_, K, V> {
         Iter::new(&self.0)
     }
+
+    pub fn keys(&self) -> Keys<'_, K, Vec<V>> {
+        self.0.keys()
+    }
+}
+
+impl<K, V> Default for HashMapList<K, V>
+where
+    K: Eq + PartialEq + Hash,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<K, V> IntoIterator for HashMapList<K, V>
