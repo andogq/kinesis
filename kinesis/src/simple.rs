@@ -18,7 +18,7 @@ impl Simple {
 impl Component for Simple {
     type Ctx = Self;
 
-    fn handle_event(&mut self, event_id: usize, event: Event) -> Option<Vec<usize>> {
+    fn handle_event(&mut self, event_id: usize, _event: Event) -> Option<Vec<usize>> {
         match event_id {
             0 => {
                 self.count -= 1;
@@ -41,15 +41,18 @@ impl Component for Simple {
             .with_piece(Node::text("decrement"), Some(2))
             .with_piece(Node::element("button").with_event("click", 1), None)
             .with_piece(Node::text("increment"), Some(4))
-            .with_conditional(
-                &[0],
-                None,
-                Fragment::build()
-                    .with_piece(Node::element("p"), None)
-                    .with_piece(Node::text("showing!"), Some(0)),
-                |ctx| ctx.count % 2 == 0,
-            )
-            .with_each(&[0], None, |ctx| {
+            .with_iter(&[0], None, |ctx| {
+                Box::new(
+                    (ctx.count % 2 == 0)
+                        .then(|| {
+                            Fragment::build()
+                                .with_piece(Node::element("p"), None)
+                                .with_piece(Node::text("showing!"), Some(0))
+                        })
+                        .into_iter(),
+                )
+            })
+            .with_iter(&[0], None, |ctx| {
                 Box::new((0..ctx.count).map(|val| {
                     Fragment::build()
                         .with_piece(Node::element("p"), None)

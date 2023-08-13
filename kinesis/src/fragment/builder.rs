@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use web_sys::Document;
 
 use super::{
-    dom_renderable::{CheckConditionFn, Conditional, Each, GetItemsFn, GetTextFn, Updatable},
+    dom_renderable::{GetIterFn, GetTextFn, Iterator, Updatable},
     EventRegistry, Fragment, Node,
 };
 
@@ -13,7 +13,7 @@ pub struct PieceBuilder {
     location: Option<usize>,
 }
 
-/// Builder for a [`super::dom_renderable::Updatable`].
+/// Builder for a [`Updatable`].
 pub struct UpdatableBuilder<Ctx> {
     get_text: GetTextFn<Ctx>,
 }
@@ -24,13 +24,12 @@ impl<Ctx> UpdatableBuilder<Ctx> {
     }
 }
 
-/// Builder for a [`super::dom_renderable::Conditional`].
-pub struct ConditionalBuilder<Ctx> {
-    fragment_builder: FragmentBuilder<Ctx>,
-    check_condition: CheckConditionFn<Ctx>,
+/// Builder for a [`Iterator`].
+pub struct IteratorBuilder<Ctx> {
+    get_items: GetIterFn<Ctx>,
 }
 
-impl<Ctx> ConditionalBuilder<Ctx>
+impl<Ctx> IteratorBuilder<Ctx>
 where
     Ctx: 'static,
 {
@@ -38,30 +37,8 @@ where
         self,
         document: &Document,
         event_registry: &Rc<RefCell<EventRegistry>>,
-    ) -> Conditional<Ctx> {
-        Conditional::new(
-            document,
-            self.check_condition,
-            self.fragment_builder.build(document, event_registry),
-        )
-    }
-}
-
-/// Builder for a [`super::dom_renderable::Each`].
-pub struct EachBuilder<Ctx> {
-    get_items: GetItemsFn<Ctx>,
-}
-
-impl<Ctx> EachBuilder<Ctx>
-where
-    Ctx: 'static,
-{
-    pub fn build(
-        self,
-        document: &Document,
-        event_registry: &Rc<RefCell<EventRegistry>>,
-    ) -> Each<Ctx> {
-        Each::new(document, self.get_items, event_registry)
+    ) -> Iterator<Ctx> {
+        Iterator::new(document, self.get_items, event_registry)
     }
 }
 
@@ -94,8 +71,7 @@ impl<T> Builder<T> {
 pub struct FragmentBuilder<Ctx> {
     pieces: Vec<PieceBuilder>,
     updatables: Vec<Builder<UpdatableBuilder<Ctx>>>,
-    conditionals: Vec<Builder<ConditionalBuilder<Ctx>>>,
-    each_blocks: Vec<Builder<EachBuilder<Ctx>>>,
+    iterators: Vec<Builder<IteratorBuilder<Ctx>>>,
 }
 
 impl<Ctx> FragmentBuilder<Ctx>
@@ -107,8 +83,7 @@ where
         Self {
             pieces: Vec::new(),
             updatables: Vec::new(),
-            conditionals: Vec::new(),
-            each_blocks: Vec::new(),
+            iterators: Vec::new(),
         }
     }
 
@@ -138,43 +113,21 @@ where
         self
     }
 
-    /// Add a [`ConditionalBuilder`] to the builder.
-    pub fn with_conditional<F>(
-        mut self,
-        dependencies: &[usize],
-        location: Option<usize>,
-        fragment_builder: FragmentBuilder<Ctx>,
-        check_condition: F,
-    ) -> Self
-    where
-        F: 'static + Fn(&Ctx) -> bool,
-    {
-        self.conditionals.push(Builder::new(
-            dependencies,
-            location,
-            ConditionalBuilder {
-                fragment_builder,
-                check_condition: Box::new(check_condition) as CheckConditionFn<Ctx>,
-            },
-        ));
-        self
-    }
-
-    /// Add a [`EachBuilder`] to the builder.
-    pub fn with_each<F>(
+    /// Add a [`IteratorBuilder`] to the builder.
+    pub fn with_iter<F>(
         mut self,
         dependencies: &[usize],
         location: Option<usize>,
         get_items: F,
     ) -> Self
     where
-        F: 'static + Fn(&Ctx) -> Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>,
+        F: 'static + Fn(&Ctx) -> Box<dyn std::iter::Iterator<Item = FragmentBuilder<Ctx>>>,
     {
-        self.each_blocks.push(Builder::new(
+        self.iterators.push(Builder::new(
             dependencies,
             location,
-            EachBuilder {
-                get_items: Box::new(get_items) as GetItemsFn<Ctx>,
+            IteratorBuilder {
+                get_items: Box::new(get_items) as GetIterFn<Ctx>,
             },
         ));
         self
@@ -203,21 +156,7 @@ where
             },
         );
 
-        self.conditionals.into_iter().for_each(
-            |Builder {
-                 dependencies,
-                 location,
-                 builder,
-             }| {
-                fragment.with_renderable(
-                    builder.build(document, event_registry),
-                    &dependencies,
-                    location,
-                );
-            },
-        );
-
-        self.each_blocks.into_iter().for_each(
+        self.iterators.into_iter().for_each(
             |Builder {
                  dependencies,
                  location,

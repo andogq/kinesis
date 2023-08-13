@@ -1,10 +1,8 @@
-mod conditional;
-mod each;
+mod iterator;
 mod updatable;
 
 use super::Location;
-pub use conditional::*;
-pub use each::*;
+pub use iterator::*;
 pub use updatable::*;
 
 /// Used to implement things that can be rendered within the DOM. Must include the required

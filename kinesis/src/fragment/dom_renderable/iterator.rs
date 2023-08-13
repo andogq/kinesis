@@ -5,16 +5,17 @@ use crate::fragment::{EventRegistry, Fragment, FragmentBuilder, Location};
 use web_sys::{Document, Node as WsNode};
 
 /// A function that returns an [`Iterator`] of [`FragmentBuilder`]s, for the given context.
-pub type GetItemsFn<Ctx> = Box<dyn Fn(&Ctx) -> Box<dyn Iterator<Item = FragmentBuilder<Ctx>>>>;
+pub type GetIterFn<Ctx> =
+    Box<dyn Fn(&Ctx) -> Box<dyn std::iter::Iterator<Item = FragmentBuilder<Ctx>>>>;
 
-/// Use to create multiple fragments depending on the current context. Useful for creating a
-/// [`Fragment`] for each item in an [`Iterator`].
-pub struct Each<Ctx> {
+/// Generates [`Fragment`]s for each item of an [`std::iter::Iterator`] dynamically.
+pub struct Iterator<Ctx> {
     /// A reference to [`Document`], which is required in order to create new [`Fragment`]s.
     document: Document,
 
-    /// A function that will return an [`Iterator`] of [`FragmentBuilder`]s for the given context.
-    get_items: GetItemsFn<Ctx>,
+    /// A function that will return an [`std::iter::Iterator`] of [`FragmentBuilder`]s for the
+    /// given context.
+    get_iter: GetIterFn<Ctx>,
 
     /// If there are mounted fragments, their references will be contained here. This is primarily
     /// to allow for proper detaching of the [`Fragment`]s.
@@ -27,20 +28,20 @@ pub struct Each<Ctx> {
     event_registry: Rc<RefCell<EventRegistry>>,
 }
 
-impl<Ctx> Each<Ctx>
+impl<Ctx> Iterator<Ctx>
 where
     Ctx: 'static,
 {
-    /// Create a new each block with the provided `get_items` function. Requires a reference to
+    /// Create a new iterator with the provided `get_iter` function. Requires a reference to
     /// [`Document`] in order to clone and store it for future use.
     pub fn new(
         document: &Document,
-        get_items: GetItemsFn<Ctx>,
+        get_iter: GetIterFn<Ctx>,
         event_registry: &Rc<RefCell<EventRegistry>>,
     ) -> Self {
         Self {
             document: document.clone(),
-            get_items,
+            get_iter,
             mounted_fragments: None,
             anchor: document.create_text_node("").into(),
             event_registry: Rc::clone(event_registry),
@@ -58,7 +59,7 @@ where
     }
 }
 
-impl<Ctx> DomRenderable<Ctx> for Each<Ctx>
+impl<Ctx> DomRenderable<Ctx> for Iterator<Ctx>
 where
     Ctx: 'static,
 {
@@ -72,7 +73,7 @@ where
 
         // Create new fragments
         self.mounted_fragments = Some(
-            (self.get_items)(context)
+            (self.get_iter)(context)
                 .map(|builder| {
                     let mut fragment = builder.build(&self.document, &self.event_registry);
 

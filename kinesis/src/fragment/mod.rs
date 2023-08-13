@@ -12,16 +12,16 @@ pub use event_registry::EventRegistry;
 pub use util::*;
 use web_sys::{Document, Node as WsNode};
 
-/// A top level representation of a fragment. Can contain static data, conditional fragments and
-/// looped fragments. Is responsible for mounting/updating/detaching itself and all children.
-/// Importantly, it will only contain static nodes, meaning that there are no variable nodes
-/// conditionally being mounted/unmounted within the fragment. If there are any dynamic nodes, a
-/// new fragment must be created.
+/// A top level representation of a fragment. Can contain static data, or iterators of fragments.
+/// Is responsible for mounting/updating/detaching itself and all children. Importantly, it will
+/// only contain static nodes, meaning that there are no variable nodes conditionally being
+/// mounted/unmounted within the fragment. If there are any dynamic nodes, a new fragment must be
+/// created.
 pub struct Fragment<Ctx> {
     /// A reference to the [`Document`].
     document: Document,
 
-    /// Collection of all renderables (eg [`dom_renderable::Conditional`], [`dom_renderable::Each`], ect).
+    /// Collection of all renderables (eg [`dom_renderable::Iterator`]).
     renderables: Vec<(Option<usize>, Box<dyn DomRenderable<Ctx>>)>,
 
     /// Collection of static [`web_sys::Node`]s, and a reference to the static node that it should
