@@ -45,17 +45,16 @@ impl Component for Simple {
             .with_node(Node::text("decrement"), Some(2))
             .with_node(Node::element("button").with_event("click", 1), None)
             .with_node(Node::text("increment"), Some(4))
-            .with_iter(&[0], None, |ctx| {
-                Box::new(
-                    (ctx.count % 2 == 0)
-                        .then(|| {
-                            Fragment::build()
-                                .with_node(Node::element("p"), None)
-                                .with_node(Node::text("showing!"), Some(0))
-                        })
-                        .into_iter(),
-                )
-            })
+            .with_conditional(
+                &[0],
+                None,
+                |ctx| ctx.count % 2 == 0,
+                |_ctx| {
+                    Fragment::build()
+                        .with_node(Node::element("p"), None)
+                        .with_node(Node::text("showing!"), Some(0))
+                },
+            )
             .with_iter(&[0], None, |ctx| {
                 Box::new((0..ctx.count).map(|val| {
                     Fragment::build()

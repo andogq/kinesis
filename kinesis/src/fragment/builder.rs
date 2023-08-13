@@ -122,6 +122,38 @@ where
         self
     }
 
+    /// Helper function to create a 'conditional' fragment, meaning a fragment that may be
+    /// re-rendered whenever a dependency changes. Will handle the mounting/unmounting of the
+    /// component depending on some condition that is passed in. This utilises [`bool::then()`] to
+    /// create an [`Option`] containing the built fragment.
+    pub fn with_conditional<F, B>(
+        mut self,
+        dependencies: &[usize],
+        location: Option<usize>,
+        check_condition: F,
+        build_fragment: B,
+    ) -> Self
+    where
+        F: 'static + Fn(&Ctx) -> bool,
+        B: 'static + Fn(&Ctx) -> FragmentBuilder<Ctx>,
+    {
+        self.iterators.push(Builder::new(
+            dependencies,
+            location,
+            IteratorBuilder {
+                get_items: Box::new(move |ctx| {
+                    Box::new(
+                        check_condition(ctx)
+                            .then(|| build_fragment(ctx))
+                            .into_iter(),
+                    )
+                }),
+            },
+        ));
+
+        self
+    }
+
     /// Use the reference to [`Document`] to build all of the renderables within this fragment
     /// builder. Returns the constructed fragment.
     pub fn build(
