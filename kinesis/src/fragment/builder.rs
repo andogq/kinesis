@@ -154,6 +154,16 @@ where
         self
     }
 
+    /// Helper function to add an element [`Node`].
+    pub fn with_element(self, kind: impl AsRef<str>, location: Option<usize>) -> Self {
+        self.with_node(Node::element(kind), location)
+    }
+
+    /// Helper function to add a text [`Node`].
+    pub fn with_text(self, content: impl AsRef<str>, location: Option<usize>) -> Self {
+        self.with_node(Node::text(content), location)
+    }
+
     /// Use the reference to [`Document`] to build all of the renderables within this fragment
     /// builder. Returns the constructed fragment.
     pub fn build(
