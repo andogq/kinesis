@@ -1,12 +1,14 @@
 mod builder;
 mod dom_renderable;
+mod event_registry;
 mod util;
 
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::util::HashMapList;
 pub use builder::*;
 pub use dom_renderable::DomRenderable;
+pub use event_registry::EventRegistry;
 pub use util::*;
 use web_sys::{Document, Node as WsNode};
 
@@ -35,8 +37,7 @@ pub struct Fragment<Ctx> {
     /// Whether the fragment is currently mounted or not.
     mounted: bool,
 
-    /// A callback function capable of propagating events up to the controller.
-    register_event: RegisterEventFn,
+    event_registry: Rc<RefCell<EventRegistry>>,
 }
 
 impl<Ctx> Fragment<Ctx>
@@ -50,7 +51,7 @@ where
 
     /// Create a new fragment. Requires a reference to [`Document`] in order to store for future
     /// usage, so that [`web_sys::Node`]s can be created as required.
-    pub fn new(document: &Document, register_event: RegisterEventFn) -> Self {
+    pub fn new(document: &Document, event_registry: &Rc<RefCell<EventRegistry>>) -> Self {
         Self {
             document: document.clone(),
 
@@ -62,13 +63,13 @@ where
 
             mounted: false,
 
-            register_event,
+            event_registry: Rc::clone(event_registry),
         }
     }
 
     /// Inserts a static node into the fragment.
     pub fn with_static_node(&mut self, kind: Node, location: Option<usize>) {
-        let piece = kind.create_node(&self.document, Rc::clone(&self.register_event));
+        let piece = kind.create_node(&self.document, &self.event_registry);
 
         self.static_nodes.push((location, piece));
     }

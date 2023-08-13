@@ -1,31 +1,17 @@
+mod controller;
 mod identifier;
 
-use web_sys::Event;
-
+pub use self::controller::Controller;
 pub use self::identifier::Identifier;
-use crate::dom::{renderable::Renderable, EventType};
-
-/// Possible render types when rendering a component.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum RenderType {
-    /// Render the root portion of the component.
-    Root,
-
-    /// Render a partial piece of the component, generally in response to the component being
-    /// updated.
-    Partial(usize),
-}
+use crate::fragment::FragmentBuilder;
 
 /// Trait that represents a renderable component
 pub trait Component {
+    type Ctx;
+
     /// Handle an incomming event, allowing for mutation of the component's state.
-    fn handle_event(
-        &mut self,
-        id: Identifier,
-        event_type: EventType,
-        event: Event,
-    ) -> Option<Vec<usize>>;
+    fn handle_event(&mut self, event_id: usize) -> Option<Vec<usize>>;
 
     /// Renders the component for a given state. Can optionally not render anything.
-    fn render(&self, update_type: RenderType) -> Option<Vec<Box<dyn Renderable>>>;
+    fn render(&self) -> FragmentBuilder<Self::Ctx>;
 }

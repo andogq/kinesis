@@ -1,7 +1,9 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use super::DomRenderable;
-use crate::fragment::{Fragment, FragmentBuilder, Location, RegisterEventFn};
+use crate::fragment::{
+    event_registry, EventRegistry, Fragment, FragmentBuilder, Location, RegisterEventFn,
+};
 use web_sys::{Document, Node as WsNode};
 
 /// A function that returns an [`Iterator`] of [`FragmentBuilder`]s, for the given context.
@@ -24,8 +26,7 @@ pub struct Each<Ctx> {
     /// location.
     anchor: WsNode,
 
-    /// A callback capable of passing events back up to the controller.
-    register_event: RegisterEventFn,
+    event_registry: Rc<RefCell<EventRegistry>>,
 }
 
 impl<Ctx> Each<Ctx>
@@ -37,14 +38,14 @@ where
     pub fn new(
         document: &Document,
         get_items: GetItemsFn<Ctx>,
-        register_event: RegisterEventFn,
+        event_registry: &Rc<RefCell<EventRegistry>>,
     ) -> Self {
         Self {
             document: document.clone(),
             get_items,
             mounted_fragments: None,
             anchor: document.create_text_node("").into(),
-            register_event,
+            event_registry: Rc::clone(event_registry),
         }
     }
 
@@ -75,8 +76,7 @@ where
         self.mounted_fragments = Some(
             (self.get_items)(context)
                 .map(|builder| {
-                    let mut fragment =
-                        builder.build(&self.document, Rc::clone(&self.register_event));
+                    let mut fragment = builder.build(&self.document, &self.event_registry);
 
                     fragment.mount(&Location::anchor(&self.anchor));
                     fragment.update(context, changed);

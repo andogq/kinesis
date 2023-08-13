@@ -1,8 +1,6 @@
-use web_sys::{console, Event};
-
 use crate::{
-    component::{Component, Identifier, RenderType},
-    dom::{dynamic::Dynamic, renderable::Renderable, text::Text, DomNode, EventType},
+    component::Component,
+    fragment::{Fragment, FragmentBuilder, Node},
 };
 
 #[derive(Default)]
@@ -10,46 +8,52 @@ pub struct Simple {
     count: usize,
 }
 
-impl Component for Simple {
-    fn handle_event(
-        &mut self,
-        id: Identifier,
-        event_type: EventType,
-        event: Event,
-    ) -> Option<Vec<usize>> {
-        // WARN: Bad matching of event here, just for testing
-        self.count += 1;
-        Some(vec![0])
+impl Simple {
+    pub fn new() -> Self {
+        Self { count: 0 }
     }
+}
 
-    fn render(&self, update_type: RenderType) -> Option<Vec<Box<dyn Renderable>>> {
-        match update_type {
-            RenderType::Root => Some(vec![
-                Box::new(DomNode::p().child(Box::new(Text::new("Simple component"))))
-                    as Box<dyn Renderable>,
-                Box::new(
-                    DomNode::p()
-                        .child(Box::new(Dynamic::new(0).depends_on(0)))
-                        .listen(EventType::Click),
-                ),
-                Box::new(Dynamic::new(1).depends_on(0)),
-            ]),
-            RenderType::Partial(0) => {
-                Some(vec![
-                    Box::new(Text::new(format!("Dynamic text: {}", self.count)))
-                        as Box<dyn Renderable>,
-                ])
+impl Component for Simple {
+    type Ctx = Self;
+
+    fn handle_event(&mut self, event_id: usize) -> Option<Vec<usize>> {
+        match event_id {
+            0 => {
+                self.count -= 1;
+                Some(vec![0])
             }
-            RenderType::Partial(1) => {
-                console::log_1(&format!("rendering, {}", self.count % 2 == 0).into());
-
-                Some(vec![Box::new((self.count % 2 == 0).then(|| {
-                    Box::new(
-                        DomNode::h1().child(Box::new(Text::new("Even")) as Box<dyn Renderable>),
-                    ) as Box<dyn Renderable>
-                })) as Box<dyn Renderable>])
+            1 => {
+                self.count += 1;
+                Some(vec![0])
             }
             _ => None,
         }
+    }
+
+    fn render(&self) -> FragmentBuilder<Self::Ctx> {
+        Fragment::build()
+            .with_piece(Node::element("p"), None)
+            .with_piece(Node::text("some content: "), Some(0))
+            .with_updatable(&[0], Some(0), |ctx: &Simple| ctx.count.to_string())
+            .with_piece(Node::element("button").with_event("click", 0), None)
+            .with_piece(Node::text("decrement"), Some(2))
+            .with_piece(Node::element("button").with_event("click", 1), None)
+            .with_piece(Node::text("increment"), Some(4))
+            .with_conditional(
+                &[0],
+                None,
+                Fragment::build()
+                    .with_piece(Node::element("p"), None)
+                    .with_piece(Node::text("showing!"), Some(0)),
+                |ctx| ctx.count % 2 == 0,
+            )
+            .with_each(&[0], None, |ctx| {
+                Box::new((0..ctx.count).map(|val| {
+                    Fragment::build()
+                        .with_piece(Node::element("p"), None)
+                        .with_piece(Node::text(format!("counting {val}")), Some(0))
+                })) as Box<dyn Iterator<Item = FragmentBuilder<Self::Ctx>>>
+            })
     }
 }

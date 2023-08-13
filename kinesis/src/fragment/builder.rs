@@ -1,10 +1,10 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use web_sys::Document;
 
 use super::{
     dom_renderable::{CheckConditionFn, Conditional, Each, GetItemsFn, GetTextFn, Updatable},
-    Fragment, Node, RegisterEventFn,
+    event_registry, EventRegistry, Fragment, Node, RegisterEventFn,
 };
 
 /// Builder for a [`super::Piece`].
@@ -34,11 +34,15 @@ impl<Ctx> ConditionalBuilder<Ctx>
 where
     Ctx: 'static,
 {
-    pub fn build(self, document: &Document, register_event: RegisterEventFn) -> Conditional<Ctx> {
+    pub fn build(
+        self,
+        document: &Document,
+        event_registry: &Rc<RefCell<EventRegistry>>,
+    ) -> Conditional<Ctx> {
         Conditional::new(
             document,
             self.check_condition,
-            self.fragment_builder.build(document, register_event),
+            self.fragment_builder.build(document, event_registry),
         )
     }
 }
@@ -52,8 +56,12 @@ impl<Ctx> EachBuilder<Ctx>
 where
     Ctx: 'static,
 {
-    pub fn build(self, document: &Document, register_event: RegisterEventFn) -> Each<Ctx> {
-        Each::new(document, self.get_items, register_event)
+    pub fn build(
+        self,
+        document: &Document,
+        event_registry: &Rc<RefCell<EventRegistry>>,
+    ) -> Each<Ctx> {
+        Each::new(document, self.get_items, event_registry)
     }
 }
 
@@ -174,8 +182,12 @@ where
 
     /// Use the reference to [`Document`] to build all of the renderables within this fragment
     /// builder. Returns the constructed fragment.
-    pub fn build(self, document: &Document, register_event: RegisterEventFn) -> Fragment<Ctx> {
-        let mut fragment = Fragment::new(document, Rc::clone(&register_event));
+    pub fn build(
+        self,
+        document: &Document,
+        event_registry: &Rc<RefCell<EventRegistry>>,
+    ) -> Fragment<Ctx> {
+        let mut fragment = Fragment::new(document, event_registry);
 
         self.pieces
             .into_iter()
@@ -198,7 +210,7 @@ where
                  builder,
              }| {
                 fragment.with_renderable(
-                    builder.build(document, Rc::clone(&register_event)),
+                    builder.build(document, event_registry),
                     &dependencies,
                     location,
                 );
@@ -212,7 +224,7 @@ where
                  builder,
              }| {
                 fragment.with_renderable(
-                    builder.build(document, Rc::clone(&register_event)),
+                    builder.build(document, event_registry),
                     &dependencies,
                     location,
                 );

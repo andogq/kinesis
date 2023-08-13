@@ -1,10 +1,10 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use js_sys::Function;
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::{Document, Event, Node as WsNode};
 
-use crate::fragment::RegisterEventFn;
+use crate::fragment::{EventRegistry, RegisterEventFn};
 
 /// Information required to build a [`web_sys::Node`]. Offers a friendly interface for creating new
 /// [`web_sys::Node`]s, and allows for programatic access to certain attributes before creation
@@ -60,7 +60,11 @@ impl Node {
 
     /// Build a [`web_sys::Node`] based off of the current node representation. Requires a
     /// reference to [`Document`] in order to call the relevant node creation method on it.
-    pub fn create_node(&self, document: &Document, register_event: RegisterEventFn) -> WsNode {
+    pub fn create_node(
+        &self,
+        document: &Document,
+        event_registry: &Rc<RefCell<EventRegistry>>,
+    ) -> WsNode {
         let node: WsNode = match &self.node_type {
             NodeType::Element(element_kind) => document
                 .create_element(element_kind)
@@ -70,16 +74,9 @@ impl Node {
         };
 
         self.events.iter().for_each(|(event_type, event_id)| {
-            let register_event = Rc::clone(&register_event);
-            let event_id = *event_id;
-
             node.add_event_listener_with_callback(
                 event_type,
-                &Closure::<dyn Fn(Event)>::new(move |_event: Event| {
-                    register_event(event_id);
-                })
-                .into_js_value()
-                .unchecked_into::<Function>(),
+                event_registry.borrow_mut().get(*event_id),
             )
             .expect("to bind listener");
         });
