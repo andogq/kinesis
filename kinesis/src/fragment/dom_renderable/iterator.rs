@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use super::DomRenderable;
+use super::{DomRenderable, DomUpdatable};
 use crate::fragment::{EventRegistry, Fragment, FragmentBuilder, Location};
 use web_sys::{Document, Node as WsNode};
 
@@ -28,10 +28,7 @@ pub struct Iterator<Ctx> {
     event_registry: Rc<RefCell<EventRegistry>>,
 }
 
-impl<Ctx> Iterator<Ctx>
-where
-    Ctx: 'static,
-{
+impl<Ctx> Iterator<Ctx> {
     /// Create a new iterator with the provided `get_iter` function. Requires a reference to
     /// [`Document`] in order to clone and store it for future use.
     pub fn new(
@@ -59,14 +56,26 @@ where
     }
 }
 
-impl<Ctx> DomRenderable<Ctx> for Iterator<Ctx>
-where
-    Ctx: 'static,
-{
+impl<Ctx> DomRenderable for Iterator<Ctx> {
     fn mount(&mut self, location: &Location) {
         location.mount(&self.anchor);
     }
 
+    fn detach(&mut self, top_level: bool) {
+        self.detach_fragments(top_level);
+
+        self.anchor
+            .parent_node()
+            .expect("node to have parent")
+            .remove_child(&self.anchor)
+            .expect("to remove child");
+    }
+}
+
+impl<Ctx> DomUpdatable<Ctx> for Iterator<Ctx>
+where
+    Ctx: 'static,
+{
     fn update(&mut self, context: &Ctx, changed: &[usize]) {
         // Detach all current mounted fragments (top level as their parent won't be removed)
         self.detach_fragments(true);
@@ -84,15 +93,5 @@ where
                 })
                 .collect(),
         );
-    }
-
-    fn detach(&mut self, top_level: bool) {
-        self.detach_fragments(top_level);
-
-        self.anchor
-            .parent_node()
-            .expect("node to have parent")
-            .remove_child(&self.anchor)
-            .expect("to remove child");
     }
 }

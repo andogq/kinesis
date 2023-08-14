@@ -7,7 +7,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::util::HashMapList;
 pub use builder::*;
-pub use dom_renderable::DomRenderable;
+pub use dom_renderable::{DomRenderable, DomUpdatable};
 pub use event_registry::EventRegistry;
 pub use util::*;
 use web_sys::{Document, Node as WsNode};
@@ -22,7 +22,7 @@ pub struct Fragment<Ctx> {
     document: Document,
 
     /// Collection of all renderables (eg [`dom_renderable::Iterator`]).
-    renderables: Vec<(Option<usize>, Box<dyn DomRenderable<Ctx>>)>,
+    renderables: Vec<(Option<usize>, Box<dyn DomUpdatable<Ctx>>)>,
 
     /// Collection of static [`web_sys::Node`]s, and a reference to the static node that it should
     /// be mounted in.
@@ -80,12 +80,12 @@ where
         location: Option<usize>,
     ) -> usize
     where
-        P: 'static + DomRenderable<Ctx>,
+        P: 'static + DomUpdatable<Ctx>,
     {
         let id = self.renderables.len();
 
         self.renderables
-            .push((location, Box::new(part) as Box<dyn DomRenderable<Ctx>>));
+            .push((location, Box::new(part) as Box<dyn DomUpdatable<Ctx>>));
         self.register_dependencies(id, dependencies);
 
         id
@@ -96,7 +96,7 @@ where
     /// This uses the [`DomRenderable::update()`] method, a generated dependency list based off of
     /// the registered dependencies of [`DomRenderable`]s.
     pub fn full_update(&mut self, context: &Ctx) {
-        DomRenderable::update(
+        DomUpdatable::update(
             self,
             context,
             self.dependencies
@@ -115,10 +115,7 @@ where
     }
 }
 
-impl<Ctx> DomRenderable<Ctx> for Fragment<Ctx>
-where
-    Ctx: 'static,
-{
+impl<Ctx> DomRenderable for Fragment<Ctx> {
     fn mount(&mut self, location: &Location) {
         self.static_nodes.iter().for_each(|(parent_id, node)| {
             parent_id
@@ -154,14 +151,6 @@ where
         self.mounted = true;
     }
 
-    fn update(&mut self, context: &Ctx, changed: &[usize]) {
-        if self.mounted {
-            self.renderables
-                .iter_mut()
-                .for_each(|(_, part)| part.update(context, changed));
-        }
-    }
-
     fn detach(&mut self, top_level: bool) {
         self.static_nodes.iter().for_each(|(_, node)| {
             node.parent_node()
@@ -175,5 +164,18 @@ where
             .for_each(|(_, part)| part.detach(top_level));
 
         self.mounted = false;
+    }
+}
+
+impl<Ctx> DomUpdatable<Ctx> for Fragment<Ctx>
+where
+    Ctx: 'static,
+{
+    fn update(&mut self, context: &Ctx, changed: &[usize]) {
+        if self.mounted {
+            self.renderables
+                .iter_mut()
+                .for_each(|(_, part)| part.update(context, changed));
+        }
     }
 }

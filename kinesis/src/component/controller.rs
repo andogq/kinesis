@@ -1,5 +1,5 @@
 use super::Component;
-use crate::fragment::{DomRenderable, EventRegistry, Fragment, Location};
+use crate::fragment::{DomRenderable, DomUpdatable, EventRegistry, Fragment, Location};
 use std::{cell::RefCell, ops::Deref, rc::Rc};
 use web_sys::Document;
 
