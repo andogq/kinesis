@@ -8,7 +8,7 @@ use web_sys::Document;
 /// component.
 pub struct Controller<C>
 where
-    C: 'static + Component<Ctx = C>,
+    C: 'static + Component,
 {
     /// The component to be rendered. This will be used as the context for the [`Fragment`].
     /// Wrapping it in [`Rc<RefCell<T>>`] allows for access to the component in callbacks and in
@@ -26,7 +26,7 @@ where
 
 impl<C> Controller<C>
 where
-    C: Component<Ctx = C>,
+    C: Component,
 {
     /// Create a new controller, returning a shared reference to the controller.
     pub fn new(document: &Document, component: C) -> Rc<RefCell<Self>> {

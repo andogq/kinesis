@@ -1,5 +1,3 @@
-use std::iter;
-
 use crate::{
     component::Component,
     fragment::{Fragment, FragmentBuilder, Node},
@@ -18,8 +16,6 @@ impl Simple {
 }
 
 impl Component for Simple {
-    type Ctx = Self;
-
     fn handle_event(&mut self, event_id: usize, _event: Event) -> Option<Vec<usize>> {
         match event_id {
             0 => {
@@ -34,11 +30,11 @@ impl Component for Simple {
         }
     }
 
-    fn render(&self) -> FragmentBuilder<Self::Ctx> {
-        Fragment::build()
+    fn render(&self) -> FragmentBuilder<Self> {
+        Fragment::<Self>::build()
             .with_element("p", None)
             .with_text("some content: ", Some(0))
-            .with_updatable(&[0], Some(0), |ctx: &Self::Ctx| {
+            .with_updatable(&[0], Some(0), |ctx| {
                 Fragment::build().with_text(ctx.count.to_string(), None)
             })
             .with_node(Node::element("button").with_event("click", 0), None)
@@ -60,7 +56,7 @@ impl Component for Simple {
                     Fragment::build()
                         .with_element("p", None)
                         .with_text(format!("counting {val}"), Some(0))
-                })) as Box<dyn Iterator<Item = FragmentBuilder<Self::Ctx>>>
+                })) as Box<dyn Iterator<Item = FragmentBuilder<Self>>>
             })
     }
 }
