@@ -1,3 +1,5 @@
+mod problem;
+
 mod component;
 mod fragment;
 mod util;
