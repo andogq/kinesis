@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{any::Any, cell::RefCell, rc::Rc};
 
-use super::{DomRenderable, DomUpdatable};
+use super::Dynamic;
 use crate::fragment::{EventRegistry, Fragment, FragmentBuilder, Location};
 use web_sys::{Document, Node as WsNode};
 
@@ -9,7 +9,10 @@ pub type GetIterFn<Ctx> =
     Box<dyn Fn(&Ctx) -> Box<dyn std::iter::Iterator<Item = FragmentBuilder<Ctx>>>>;
 
 /// Generates [`Fragment`]s for each item of an [`std::iter::Iterator`] dynamically.
-pub struct Iterator<Ctx> {
+pub struct Iterator<Ctx>
+where
+    Ctx: Any + ?Sized,
+{
     /// A reference to [`Document`], which is required in order to create new [`Fragment`]s.
     document: Document,
 
@@ -28,7 +31,10 @@ pub struct Iterator<Ctx> {
     event_registry: Rc<RefCell<EventRegistry>>,
 }
 
-impl<Ctx> Iterator<Ctx> {
+impl<Ctx> Iterator<Ctx>
+where
+    Ctx: Any + ?Sized,
+{
     /// Create a new iterator with the provided `get_iter` function. Requires a reference to
     /// [`Document`] in order to clone and store it for future use.
     pub fn new(
@@ -56,7 +62,12 @@ impl<Ctx> Iterator<Ctx> {
     }
 }
 
-impl<Ctx> DomRenderable for Iterator<Ctx> {
+impl<Ctx> Dynamic for Iterator<Ctx>
+where
+    Ctx: Any + ?Sized,
+{
+    type Ctx = Ctx;
+
     fn mount(&mut self, location: &Location) {
         location.mount(&self.anchor);
     }
@@ -70,13 +81,8 @@ impl<Ctx> DomRenderable for Iterator<Ctx> {
             .remove_child(&self.anchor)
             .expect("to remove child");
     }
-}
 
-impl<Ctx> DomUpdatable<Ctx> for Iterator<Ctx>
-where
-    Ctx: 'static,
-{
-    fn update(&mut self, context: &Ctx, changed: &[usize]) {
+    fn update(&mut self, context: &Self::Ctx, changed: &[usize]) {
         // Detach all current mounted fragments (top level as their parent won't be removed)
         self.detach_fragments(true);
 

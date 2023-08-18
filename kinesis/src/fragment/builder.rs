@@ -1,4 +1,4 @@
-use std::{cell::RefCell, iter, rc::Rc};
+use std::{any::Any, cell::RefCell, iter, rc::Rc};
 
 use web_sys::Document;
 
@@ -14,13 +14,16 @@ pub struct NodeBuilder {
 }
 
 /// Builder for a [`Iterator`].
-pub struct IteratorBuilder<Ctx> {
+pub struct IteratorBuilder<Ctx>
+where
+    Ctx: Any + ?Sized,
+{
     get_items: GetIterFn<Ctx>,
 }
 
 impl<Ctx> IteratorBuilder<Ctx>
 where
-    Ctx: 'static,
+    Ctx: Any + ?Sized,
 {
     pub fn build(
         self,
@@ -57,14 +60,20 @@ impl<T> Builder<T> {
 
 /// Used to build and represent a [`Fragment`] that does not yet have access to the [Document].
 /// Contains a collection of each of the possible builders.
-pub struct FragmentBuilder<Ctx> {
+pub struct FragmentBuilder<Ctx>
+where
+    Ctx: Any + ?Sized,
+{
+    /// Static nodes to be rendered within this fragment.
     nodes: Vec<NodeBuilder>,
+
+    /// Iterators that will be rendered within this fragment
     iterators: Vec<Builder<IteratorBuilder<Ctx>>>,
 }
 
 impl<Ctx> FragmentBuilder<Ctx>
 where
-    Ctx: 'static,
+    Ctx: Any + ?Sized,
 {
     /// Create a new, empty instance.
     pub fn new() -> Self {

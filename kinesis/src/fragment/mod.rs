@@ -3,11 +3,11 @@ mod dom_renderable;
 mod event_registry;
 mod util;
 
-use std::{cell::RefCell, rc::Rc};
+use std::{any::Any, cell::RefCell, rc::Rc};
 
-use crate::util::HashMapList;
+use crate::{component::AnyComponent, nested::NestedController, util::HashMapList};
 pub use builder::*;
-pub use dom_renderable::{DomRenderable, DomUpdatable};
+pub use dom_renderable::Dynamic;
 pub use event_registry::EventRegistry;
 pub use util::*;
 use web_sys::{Document, Node as WsNode};
@@ -17,12 +17,18 @@ use web_sys::{Document, Node as WsNode};
 /// only contain static nodes, meaning that there are no variable nodes conditionally being
 /// mounted/unmounted within the fragment. If there are any dynamic nodes, a new fragment must be
 /// created.
-pub struct Fragment<Ctx> {
+pub struct Fragment<Ctx>
+where
+    Ctx: Any + ?Sized,
+{
     /// A reference to the [`Document`].
     document: Document,
 
     /// Collection of all renderables (eg [`dom_renderable::Iterator`]).
-    renderables: Vec<(Option<usize>, Box<dyn DomUpdatable<Ctx>>)>,
+    renderables: Vec<(Option<usize>, Box<dyn Dynamic<Ctx = Ctx>>)>,
+
+    /// Nested controllers within this fragment.
+    controllers: Vec<(Option<usize>, NestedController<Ctx, AnyComponent>)>,
 
     /// Collection of static [`web_sys::Node`]s, and a reference to the static node that it should
     /// be mounted in.
@@ -40,7 +46,7 @@ pub struct Fragment<Ctx> {
 
 impl<Ctx> Fragment<Ctx>
 where
-    Ctx: 'static,
+    Ctx: 'static + Any + ?Sized,
 {
     /// Create a new [`FragmentBuilder`].
     pub fn build() -> FragmentBuilder<Ctx> {
@@ -54,6 +60,8 @@ where
             document: document.clone(),
 
             renderables: Vec::new(),
+
+            controllers: Vec::new(),
 
             static_nodes: Vec::new(),
 
@@ -80,12 +88,12 @@ where
         location: Option<usize>,
     ) -> usize
     where
-        P: 'static + DomUpdatable<Ctx>,
+        P: 'static + Dynamic<Ctx = Ctx>,
     {
         let id = self.renderables.len();
 
         self.renderables
-            .push((location, Box::new(part) as Box<dyn DomUpdatable<Ctx>>));
+            .push((location, Box::new(part) as Box<dyn Dynamic<Ctx = Ctx>>));
         self.register_dependencies(id, dependencies);
 
         id
@@ -96,7 +104,7 @@ where
     /// This uses the [`DomRenderable::update()`] method, a generated dependency list based off of
     /// the registered dependencies of [`DomRenderable`]s.
     pub fn full_update(&mut self, context: &Ctx) {
-        DomUpdatable::update(
+        Dynamic::update(
             self,
             context,
             self.dependencies
@@ -115,7 +123,12 @@ where
     }
 }
 
-impl<Ctx> DomRenderable for Fragment<Ctx> {
+impl<Ctx> Dynamic for Fragment<Ctx>
+where
+    Ctx: 'static + ?Sized,
+{
+    type Ctx = Ctx;
+
     fn mount(&mut self, location: &Location) {
         self.static_nodes.iter().for_each(|(parent_id, node)| {
             parent_id
@@ -148,6 +161,22 @@ impl<Ctx> DomRenderable for Fragment<Ctx> {
             )
         });
 
+        self.controllers.iter_mut().for_each(|(parent_id, nested)| {
+            nested.controller.borrow_mut().mount(
+                &parent_id
+                    .map(|parent_id| {
+                        Location::parent(
+                            &self
+                                .static_nodes
+                                .get(parent_id)
+                                .expect("location to exist")
+                                .1,
+                        )
+                    })
+                    .unwrap_or(location.clone()),
+            );
+        });
+
         self.mounted = true;
     }
 
@@ -163,19 +192,22 @@ impl<Ctx> DomRenderable for Fragment<Ctx> {
             .iter_mut()
             .for_each(|(_, part)| part.detach(top_level));
 
+        self.controllers.iter_mut().for_each(|(_, nested)| {
+            nested.controller.borrow_mut().detach(top_level);
+        });
+
         self.mounted = false;
     }
-}
 
-impl<Ctx> DomUpdatable<Ctx> for Fragment<Ctx>
-where
-    Ctx: 'static,
-{
     fn update(&mut self, context: &Ctx, changed: &[usize]) {
         if self.mounted {
             self.renderables
                 .iter_mut()
                 .for_each(|(_, part)| part.update(context, changed));
+
+            self.controllers
+                .iter_mut()
+                .for_each(|(_, nested)| nested.update(context, changed));
         }
     }
 }

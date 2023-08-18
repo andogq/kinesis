@@ -2,12 +2,13 @@ mod problem;
 
 mod component;
 mod fragment;
+mod nested;
 mod util;
 
-mod simple;
+// mod simple;
 
 use component::Controller;
-use simple::Simple;
+// use simple::Simple;
 use wasm_bindgen::prelude::*;
 use web_sys::window;
 
@@ -22,8 +23,8 @@ pub fn main() -> Result<(), JsValue> {
     let document = window.document().expect("should have a document on window");
     let body = document.body().expect("body to exist");
 
-    let component = Controller::new(&document, Simple::new());
-    component.borrow_mut().mount(&Location::parent(&body));
+    // let component = Controller::new(&document, Simple::new());
+    // component.borrow_mut().mount(&Location::parent(&body));
 
     Ok(())
 }
