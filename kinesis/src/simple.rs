@@ -16,6 +16,8 @@ impl Simple {
 }
 
 impl Component for Simple {
+    type Ctx = Self;
+
     fn handle_event(&mut self, event_id: usize, _event: Event) -> Option<Vec<usize>> {
         match event_id {
             0 => {
@@ -30,7 +32,7 @@ impl Component for Simple {
         }
     }
 
-    fn render(&self) -> FragmentBuilder<Self> {
+    fn render(&self) -> FragmentBuilder<Self::Ctx> {
         Fragment::<Self>::build()
             .with_element("p", None)
             .with_text("some content: ", Some(0))
@@ -58,5 +60,9 @@ impl Component for Simple {
                         .with_text(format!("counting {val}"), Some(0))
                 })) as Box<dyn Iterator<Item = FragmentBuilder<Self>>>
             })
+    }
+
+    fn get_context(&self) -> &Self::Ctx {
+        self
     }
 }

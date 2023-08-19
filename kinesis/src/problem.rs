@@ -11,7 +11,7 @@ trait Dynamic {
     fn update(&mut self, context: &Self::Ctx, changed: &[usize]);
 }
 
-type AnyComponent = dyn Component<Ctx = dyn Any, Child = dyn Any>;
+type AnyComponent = dyn Component<Ctx = dyn Any>;
 
 struct ControllerChild<Ctx, C>
 where
@@ -57,16 +57,22 @@ where
     }
 }
 
+enum Node {
+    Text(String),
+    Element(String),
+}
+
 struct Fragment<Ctx>
 where
     Ctx: Any + ?Sized,
 {
+    nodes: Vec<Node>,
     renderables: Vec<Box<dyn Dynamic<Ctx = Ctx>>>,
     controllers: Vec<ControllerChild<Ctx, AnyComponent>>,
 }
 impl<Ctx> Dynamic for Fragment<Ctx>
 where
-    Ctx: 'static + ?Sized,
+    Ctx: Any + 'static + ?Sized,
 {
     type Ctx = Ctx;
 
@@ -105,19 +111,6 @@ where
     pub fn build(self) -> Fragment<Ctx> {
         todo!();
     }
-}
-
-trait Component {
-    type Ctx: Any + ?Sized;
-    type Child: Any + ?Sized;
-
-    fn handle_event(&mut self) -> Option<Vec<usize>>;
-
-    fn render(&self) -> FragmentBuilder<Self::Ctx>;
-
-    fn get_context(&self) -> &Self::Ctx;
-
-    fn update_child(&self, child: &mut Self::Child);
 }
 
 struct Controller<C>
@@ -182,21 +175,24 @@ where
     }
 }
 
-enum ChildEnum {
-    Count(Count),
+trait Component {
+    type Ctx: Any + ?Sized + 'static;
+
+    fn handle_event(&mut self) -> Option<Vec<usize>>;
+
+    fn render(&self) -> FragmentBuilder<Self::Ctx>;
+
+    fn get_context(&self) -> &Self::Ctx;
 }
 
-struct Count(usize);
-impl From<Count> for ChildEnum {
-    fn from(count: Count) -> Self {
-        ChildEnum::Count(count)
-    }
+trait ComponentBB: Component {
+    fn handle_event(&mut self) -> Option<Vec<usize>>;
+    fn render(&self) -> FragmentBuilder<dyn Any>;
 }
 
 struct App(usize);
 impl Component for App {
     type Ctx = Self;
-    type Child = ChildEnum;
 
     fn handle_event(&mut self) -> Option<Vec<usize>> {
         todo!()
@@ -209,11 +205,29 @@ impl Component for App {
     fn get_context(&self) -> &Self::Ctx {
         self
     }
+}
 
-    fn update_child(&self, child: &mut Self::Child) {
-        // Perform prop bindings here
-        match child {
-            Self::Child::Count(count) => count.0 = self.0 * 2,
-        }
-    }
+fn test() {
+    let c = Box::new(App(0));
+
+    // Can cast App to Any (required for a cast)
+    // c as Box<dyn RealComponent<Ctx = App>>;
+
+    // Can cast to component with a type for the context
+    // c as Box<dyn Component<Ctx = App>>;
+
+    // c as Box<dyn Component<Ctx = dyn Any>>;
+
+    // TODO: Somehow cast this to Box<dyn Component<Ctx = dyn Any>>
+
+    // let c = ComponentChild::<(), App> {
+    //     component: RefCell::new(Box::new(c)),
+    //     update: Box::new(|&ctx, c| {}),
+    // };
+
+    // c as ComponentChild<(), dyn Component<Ctx = App>>;
+
+    // let c = ComponentWrapper { component: c };
+
+    // let a = Box::new(c) as Box<ComponentWrapper<dyn Component<Ctx = <App as Component>::Ctx>>>;
 }

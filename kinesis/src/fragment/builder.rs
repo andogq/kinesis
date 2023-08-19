@@ -2,6 +2,11 @@ use std::{any::Any, cell::RefCell, iter, rc::Rc};
 
 use web_sys::Document;
 
+use crate::{
+    component::{AnyComponent, Component},
+    nested::NestedComponent,
+};
+
 use super::{
     dom_renderable::{GetIterFn, Iterator},
     EventRegistry, Fragment, Node,
@@ -69,6 +74,8 @@ where
 
     /// Iterators that will be rendered within this fragment
     iterators: Vec<Builder<IteratorBuilder<Ctx>>>,
+
+    components: Vec<Builder<NestedComponent<Ctx, AnyComponent>>>,
 }
 
 impl<Ctx> FragmentBuilder<Ctx>
@@ -80,6 +87,7 @@ where
         Self {
             nodes: Vec::new(),
             iterators: Vec::new(),
+            components: Vec::new(),
         }
     }
 
@@ -106,6 +114,29 @@ where
                 get_items: Box::new(get_items) as GetIterFn<Ctx>,
             },
         ));
+        self
+    }
+
+    pub fn with_component<C, F>(
+        mut self,
+        dependencies: &[usize],
+        location: Option<usize>,
+        component: C,
+        update: F,
+    ) -> Self
+    where
+        C: Component,
+        F: Fn(&Ctx, &[usize], &mut C),
+    {
+        // self.components.push(Builder::new(
+        //     dependencies,
+        //     location,
+        //     NestedComponent {
+        //         component: RefCell::new(Box::new(component) as Box<AnyComponent>),
+        //         update: Box::new(update),
+        //     },
+        // ));
+
         self
     }
 
