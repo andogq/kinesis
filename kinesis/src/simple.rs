@@ -4,7 +4,7 @@ use crate::{
     component::{Component, ComponentWrapper},
     fragment::{Fragment, FragmentBuilder, Node},
 };
-use web_sys::{console, Event};
+use web_sys::Event;
 
 pub struct BoldText(String);
 impl BoldText {
@@ -18,7 +18,6 @@ impl BoldText {
             .with_updatable(&[0], Some(2), {
                 let component = Rc::clone(&component);
                 move || {
-                    console::log_1(&"here".into());
                     let component = component.borrow();
                     Fragment::build().with_text(component.0.clone(), None)
                 }
@@ -93,8 +92,6 @@ impl Simple {
                 move |changed| {
                     let component = component.borrow();
                     let mut bold_text = bold_text.borrow_mut();
-
-                    console::log_1(&"update".into());
 
                     changed.iter().for_each(|changed| match changed {
                         0 => bold_text.0 = component.count.to_string(),

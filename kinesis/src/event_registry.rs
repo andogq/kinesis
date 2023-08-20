@@ -1,7 +1,7 @@
 use js_sys::Function;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use wasm_bindgen::{prelude::Closure, JsCast};
-use web_sys::{console, Event};
+use web_sys::Event;
 
 pub type RegisterEventFn = Rc<dyn Fn(usize, Event)>;
 
@@ -31,7 +31,6 @@ impl EventRegistry {
     pub fn get(&mut self, event_id: usize) -> &Function {
         self.closures.entry(event_id).or_insert_with(|| {
             let register_event = Rc::clone(&self.register_event);
-            console::log_1(&"creating event".into());
             Closure::<dyn Fn(Event)>::new(move |event| {
                 register_event(event_id, event);
             })

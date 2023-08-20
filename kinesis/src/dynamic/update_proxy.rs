@@ -1,5 +1,3 @@
-use web_sys::console;
-
 use crate::fragment::Location;
 
 use super::Dynamic;
@@ -41,8 +39,6 @@ impl Dynamic for UpdateProxy {
     }
 
     fn update(&mut self, changed: &[usize]) {
-        console::log_1(&"update called".into());
-
         // Run the update function
         let changed = (self.proxy_update)(changed);
 
