@@ -1,7 +1,5 @@
 mod iterator;
 
-use std::any::Any;
-
 use super::Location;
 pub use iterator::*;
 
@@ -9,9 +7,6 @@ pub use iterator::*;
 /// functionality to mount nodes to the provided position, update itself as a result of any state
 /// cahnges, and to properly clean up after itself when detached from the DOM.
 pub trait Dynamic {
-    /// Type of the context that will be used in this dynamic part.
-    type Ctx: Any + ?Sized;
-
     /// Mount self to the DOM as described by `location`. It is guarenteed that this method will
     /// only be called if not currently mounted, so this does not need to be checked. It also
     /// contains a `register_event` function, which can be used to propagate events back up to the
@@ -33,5 +28,5 @@ pub trait Dynamic {
     ///
     /// Ideally, `changed` should not be included, and renderables should (somehow) register
     /// sub-fragments to the original controller, to avoid this implemenetation detail.
-    fn update(&mut self, context: &Self::Ctx, changed: &[usize]);
+    fn update(&mut self, changed: &[usize]);
 }

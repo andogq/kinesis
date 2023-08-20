@@ -5,24 +5,20 @@ use crate::fragment::{EventRegistry, Fragment, FragmentBuilder, Location};
 use web_sys::{Document, Node as WsNode};
 
 /// A function that returns an [`Iterator`] of [`FragmentBuilder`]s, for the given context.
-pub type GetIterFn<Ctx> =
-    Box<dyn Fn(&Ctx) -> Box<dyn std::iter::Iterator<Item = FragmentBuilder<Ctx>>>>;
+pub type GetIterFn = Box<dyn Fn() -> Box<dyn std::iter::Iterator<Item = FragmentBuilder>>>;
 
 /// Generates [`Fragment`]s for each item of an [`std::iter::Iterator`] dynamically.
-pub struct Iterator<Ctx>
-where
-    Ctx: Any + ?Sized,
-{
+pub struct Iterator {
     /// A reference to [`Document`], which is required in order to create new [`Fragment`]s.
     document: Document,
 
     /// A function that will return an [`std::iter::Iterator`] of [`FragmentBuilder`]s for the
     /// given context.
-    get_iter: GetIterFn<Ctx>,
+    get_iter: GetIterFn,
 
     /// If there are mounted fragments, their references will be contained here. This is primarily
     /// to allow for proper detaching of the [`Fragment`]s.
-    mounted_fragments: Option<Vec<Fragment<Ctx>>>,
+    mounted_fragments: Option<Vec<Fragment>>,
 
     /// A reference to an anchor within the DOM. Items within the iterator will be rendered at this
     /// location.
@@ -31,15 +27,12 @@ where
     event_registry: Rc<RefCell<EventRegistry>>,
 }
 
-impl<Ctx> Iterator<Ctx>
-where
-    Ctx: Any + ?Sized,
-{
+impl Iterator {
     /// Create a new iterator with the provided `get_iter` function. Requires a reference to
     /// [`Document`] in order to clone and store it for future use.
     pub fn new(
         document: &Document,
-        get_iter: GetIterFn<Ctx>,
+        get_iter: GetIterFn,
         event_registry: &Rc<RefCell<EventRegistry>>,
     ) -> Self {
         Self {
@@ -62,12 +55,7 @@ where
     }
 }
 
-impl<Ctx> Dynamic for Iterator<Ctx>
-where
-    Ctx: Any + ?Sized,
-{
-    type Ctx = Ctx;
-
+impl Dynamic for Iterator {
     fn mount(&mut self, location: &Location) {
         location.mount(&self.anchor);
     }
@@ -82,18 +70,18 @@ where
             .expect("to remove child");
     }
 
-    fn update(&mut self, context: &Self::Ctx, changed: &[usize]) {
+    fn update(&mut self, changed: &[usize]) {
         // Detach all current mounted fragments (top level as their parent won't be removed)
         self.detach_fragments(true);
 
         // Create new fragments
         self.mounted_fragments = Some(
-            (self.get_iter)(context)
+            (self.get_iter)()
                 .map(|builder| {
                     let mut fragment = builder.build(&self.document, &self.event_registry);
 
                     fragment.mount(&Location::anchor(&self.anchor));
-                    fragment.update(context, changed);
+                    fragment.update(changed);
 
                     fragment
                 })

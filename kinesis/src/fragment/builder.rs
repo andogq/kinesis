@@ -1,10 +1,10 @@
-use std::{any::Any, cell::RefCell, iter, rc::Rc};
+use std::{cell::RefCell, iter, rc::Rc};
 
 use web_sys::Document;
 
 use crate::{
-    component::{AnyComponent, Component},
-    nested::NestedComponent,
+    component::Component,
+    nested::{NestedComponent, UpdateComponentFn},
 };
 
 use super::{
@@ -19,22 +19,16 @@ pub struct NodeBuilder {
 }
 
 /// Builder for a [`Iterator`].
-pub struct IteratorBuilder<Ctx>
-where
-    Ctx: Any + ?Sized,
-{
-    get_items: GetIterFn<Ctx>,
+pub struct IteratorBuilder {
+    get_items: GetIterFn,
 }
 
-impl<Ctx> IteratorBuilder<Ctx>
-where
-    Ctx: Any + ?Sized,
-{
+impl IteratorBuilder {
     pub fn build(
         self,
         document: &Document,
         event_registry: &Rc<RefCell<EventRegistry>>,
-    ) -> Iterator<Ctx> {
+    ) -> Iterator {
         Iterator::new(document, self.get_items, event_registry)
     }
 }
@@ -65,23 +59,17 @@ impl<T> Builder<T> {
 
 /// Used to build and represent a [`Fragment`] that does not yet have access to the [Document].
 /// Contains a collection of each of the possible builders.
-pub struct FragmentBuilder<Ctx>
-where
-    Ctx: Any + ?Sized,
-{
+pub struct FragmentBuilder {
     /// Static nodes to be rendered within this fragment.
     nodes: Vec<NodeBuilder>,
 
     /// Iterators that will be rendered within this fragment
-    iterators: Vec<Builder<IteratorBuilder<Ctx>>>,
+    iterators: Vec<Builder<IteratorBuilder>>,
 
-    components: Vec<Builder<NestedComponent<Ctx, AnyComponent>>>,
+    components: Vec<Builder<NestedComponent<dyn Component>>>,
 }
 
-impl<Ctx> FragmentBuilder<Ctx>
-where
-    Ctx: Any + ?Sized,
-{
+impl FragmentBuilder {
     /// Create a new, empty instance.
     pub fn new() -> Self {
         Self {
@@ -105,13 +93,13 @@ where
         get_items: F,
     ) -> Self
     where
-        F: 'static + Fn(&Ctx) -> Box<dyn std::iter::Iterator<Item = FragmentBuilder<Ctx>>>,
+        F: 'static + Fn() -> Box<dyn std::iter::Iterator<Item = FragmentBuilder>>,
     {
         self.iterators.push(Builder::new(
             dependencies,
             location,
             IteratorBuilder {
-                get_items: Box::new(get_items) as GetIterFn<Ctx>,
+                get_items: Box::new(get_items) as GetIterFn,
             },
         ));
         self
@@ -121,21 +109,22 @@ where
         mut self,
         dependencies: &[usize],
         location: Option<usize>,
-        component: C,
+        (component, fragment_builder): (Rc<RefCell<C>>, FragmentBuilder),
         update: F,
     ) -> Self
     where
-        C: Component,
-        F: Fn(&Ctx, &[usize], &mut C),
+        C: Component + 'static,
+        F: Fn(&[usize]) + 'static,
     {
-        // self.components.push(Builder::new(
-        //     dependencies,
-        //     location,
-        //     NestedComponent {
-        //         component: RefCell::new(Box::new(component) as Box<AnyComponent>),
-        //         update: Box::new(update),
-        //     },
-        // ));
+        self.components.push(Builder::new(
+            dependencies,
+            location,
+            NestedComponent {
+                component: component as Rc<RefCell<dyn Component>>,
+                fragment_builder,
+                update: Box::new(update) as Box<UpdateComponentFn>,
+            },
+        ));
 
         self
     }
@@ -150,13 +139,13 @@ where
         get_fragment: F,
     ) -> Self
     where
-        F: 'static + Fn(&Ctx) -> FragmentBuilder<Ctx>,
+        F: 'static + Fn() -> FragmentBuilder,
     {
         self.iterators.push(Builder::new(
             dependencies,
             location,
             IteratorBuilder {
-                get_items: Box::new(move |ctx| Box::new(iter::once(get_fragment(ctx)))),
+                get_items: Box::new(move || Box::new(iter::once(get_fragment()))),
             },
         ));
         self
@@ -174,19 +163,15 @@ where
         build_fragment: B,
     ) -> Self
     where
-        F: 'static + Fn(&Ctx) -> bool,
-        B: 'static + Fn(&Ctx) -> FragmentBuilder<Ctx>,
+        F: 'static + Fn() -> bool,
+        B: 'static + Fn() -> FragmentBuilder,
     {
         self.iterators.push(Builder::new(
             dependencies,
             location,
             IteratorBuilder {
-                get_items: Box::new(move |ctx| {
-                    Box::new(
-                        check_condition(ctx)
-                            .then(|| build_fragment(ctx))
-                            .into_iter(),
-                    )
+                get_items: Box::new(move || {
+                    Box::new(check_condition().then(&build_fragment).into_iter())
                 }),
             },
         ));
@@ -210,7 +195,7 @@ where
         self,
         document: &Document,
         event_registry: &Rc<RefCell<EventRegistry>>,
-    ) -> Fragment<Ctx> {
+    ) -> Fragment {
         let mut fragment = Fragment::new(document, event_registry);
 
         self.nodes
@@ -225,6 +210,20 @@ where
              }| {
                 fragment.with_renderable(
                     builder.build(document, event_registry),
+                    &dependencies,
+                    location,
+                );
+            },
+        );
+
+        self.components.into_iter().for_each(
+            |Builder {
+                 dependencies,
+                 location,
+                 builder,
+             }| {
+                fragment.with_controller(
+                    builder.into_controller(document),
                     &dependencies,
                     location,
                 );

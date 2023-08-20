@@ -1,6 +1,6 @@
 use super::Component;
-use crate::fragment::{Dynamic, EventRegistry, Fragment, Location};
-use std::{cell::RefCell, ops::Deref, rc::Rc};
+use crate::fragment::{Dynamic, EventRegistry, Fragment, FragmentBuilder, Location};
+use std::{cell::RefCell, rc::Rc};
 use web_sys::Document;
 
 /// A component controller, responsible for controlling the top level [`Fragment`] for a component,
@@ -13,7 +13,7 @@ where
     /// The component to be rendered. This will be used as the context for the [`Fragment`].
     /// Wrapping it in [`Rc<RefCell<T>>`] allows for access to the component in callbacks and in
     /// response to events, so it can be mutated as required.
-    pub component: Rc<RefCell<Box<C>>>,
+    pub component: Rc<RefCell<C>>,
 
     /// The [`EventRegistry`] for this component. Responsible for creating [`js_sys::Function`]s
     /// for a given `event_id`, and caching it so it can be re-used for future renders. Wrapped in
@@ -21,7 +21,7 @@ where
     event_registry: Rc<RefCell<EventRegistry>>,
 
     /// The top level fragment that
-    fragment: Fragment<C::Ctx>,
+    fragment: Fragment,
 }
 
 impl<C> Controller<C>
@@ -29,28 +29,13 @@ where
     C: Component + ?Sized + 'static,
 {
     /// Create a new controller, returning a shared reference to the controller.
-    pub fn new<SizedC>(document: &Document, component: SizedC) -> Rc<RefCell<Controller<SizedC>>>
-    where
-        SizedC: Component + 'static,
-    {
-        Self::from_ref_cell(document, RefCell::new(Box::new(component)))
-    }
-
-    pub fn from_ref_cell<_C>(
+    pub fn new(
         document: &Document,
-        component: RefCell<Box<_C>>,
-    ) -> Rc<RefCell<Controller<_C>>>
-    where
-        _C: Component + ?Sized + 'static,
-    {
+        (component, fragment_builder): (Rc<RefCell<C>>, FragmentBuilder),
+    ) -> Rc<RefCell<Self>> {
         // Create a reference to this controller. Initially contains `None`, however once the
         // controller is constructed it will be swapped in.
-        let controller_reference =
-            Rc::new(RefCell::new(Option::<Rc<RefCell<Controller<_C>>>>::None));
-
-        // Place the component within a shared reference, so that it can be accessed within the
-        // event registry.
-        let component = Rc::new(component);
+        let controller_reference = Rc::new(RefCell::new(Option::<Rc<RefCell<Self>>>::None));
 
         // Create the event registry.
         let event_registry = EventRegistry::new({
@@ -60,24 +45,20 @@ where
 
             move |event_id, event| {
                 // Perform a callback on the component
-                let mut component = component.borrow_mut();
-                let Some(changed) = component.handle_event(event_id, event) else { return };
+                let Some(changed) = component.borrow_mut().handle_event(event_id, event) else { return };
 
                 // Need to trigger an update on the fragment
                 if let Some(controller) = controller_reference.borrow().as_ref() {
-                    controller
-                        .borrow_mut()
-                        .fragment
-                        .update(component.get_context(), &changed);
+                    controller.borrow_mut().fragment.update(&changed);
                 }
             }
         });
 
         // Create the fragment for the component, passing it a reference to the event registry.
-        let fragment = component.borrow().render().build(document, &event_registry);
+        let fragment = fragment_builder.build(document, &event_registry);
 
         // Create the controller within a shared reference.
-        let controller = Rc::new(RefCell::new(Controller::<_C> {
+        let controller = Rc::new(RefCell::new(Self {
             component,
             event_registry,
             fragment,
@@ -91,13 +72,11 @@ where
 
     /// Mount the component to the provided [`Location`].
     pub fn mount(&mut self, location: &Location) {
-        let component = self.component.borrow_mut();
-
         // Mount the fragment at the provided location
         self.fragment.mount(location);
 
         // Perform an update to get ensure the state is correct
-        self.fragment.full_update(component.deref().get_context());
+        self.fragment.full_update();
     }
 }
 
@@ -105,8 +84,6 @@ impl<C> Dynamic for Controller<C>
 where
     C: Component + ?Sized,
 {
-    type Ctx = ();
-
     fn mount(&mut self, location: &Location) {
         // Mount the fragment to the specified location
         self.fragment.mount(location);
@@ -116,7 +93,9 @@ where
         self.fragment.detach(top_level);
     }
 
-    fn update(&mut self, context: &Self::Ctx, changed: &[usize]) {
+    /// Note: `changed` is the parent controller's changed properties, which will need to be mapped
+    /// to this controller's properties somehow.
+    fn update(&mut self, changed: &[usize]) {
         // TODO: Might be redundant if context is updated from the parent down
         // let component = self.component.borrow();
         // self.fragment.update(component.get_context(), &[]);
