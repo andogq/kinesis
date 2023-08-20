@@ -74,8 +74,8 @@ impl Fragment {
         self.static_nodes.push((location, node));
     }
 
-    /// Inserts a dynamic [`DomRenderable`] into the fragment.
-    pub(super) fn with_renderable<P>(
+    /// Inserts something implementing [`Dynamic`] into the fragment.
+    pub(super) fn with_dynamic<P>(
         &mut self,
         part: P,
         dependencies: &[usize],
@@ -91,17 +91,6 @@ impl Fragment {
         self.register_dependencies(id, dependencies);
 
         id
-    }
-
-    pub(super) fn with_controller(
-        &mut self,
-        controller: NestedController<dyn Component>,
-        dependencies: &[usize],
-        location: Option<usize>,
-    ) {
-        self.controllers.push((location, controller));
-
-        // TODO: Register dependencies
     }
 
     /// Performs a full update on the fragment.

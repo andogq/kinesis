@@ -208,7 +208,7 @@ impl FragmentBuilder {
                  location,
                  builder,
              }| {
-                fragment.with_renderable(
+                fragment.with_dynamic(
                     builder.build(document, event_registry),
                     &dependencies,
                     location,
@@ -222,11 +222,7 @@ impl FragmentBuilder {
                  location,
                  builder,
              }| {
-                fragment.with_controller(
-                    builder.into_controller(document),
-                    &dependencies,
-                    location,
-                );
+                fragment.with_dynamic(builder.into_controller(document), &dependencies, location);
             },
         );
 

@@ -1,5 +1,8 @@
 use super::UpdateComponentFn;
-use crate::component::{Component, Controller};
+use crate::{
+    component::{Component, Controller},
+    fragment::{Dynamic, Location},
+};
 use std::{cell::RefCell, rc::Rc};
 
 /// A [`Controller`] that is nested within another [`Controller`].
@@ -14,12 +17,25 @@ where
     pub update: Box<UpdateComponentFn>,
 }
 
-impl<C> NestedController<C>
+impl<C> Dynamic for NestedController<C>
 where
-    C: Component + ?Sized,
+    C: Component + ?Sized + 'static,
 {
-    /// Update the internal state of the [`Component`] with the provided context.
-    pub fn update(&self, changed: &[usize]) {
-        (self.update)(changed)
+    fn update(&mut self, changed: &[usize]) {
+        // Run attached update function
+        (self.update)(changed);
+
+        // TODO: Convert parent changed to component changed
+
+        // Run controller update
+        self.controller.borrow_mut().update(changed);
+    }
+
+    fn mount(&mut self, location: &Location) {
+        self.controller.borrow_mut().mount(location);
+    }
+
+    fn detach(&mut self, top_level: bool) {
+        self.controller.borrow_mut().detach(top_level);
     }
 }
