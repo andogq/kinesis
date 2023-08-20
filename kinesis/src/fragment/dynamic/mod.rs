@@ -1,7 +1,11 @@
 mod iterator;
+mod update_proxy;
+
+use std::{cell::RefCell, rc::Rc};
 
 use super::Location;
 pub use iterator::*;
+pub use update_proxy::*;
 
 /// Used to implement things that can be rendered within the DOM. Must include the required
 /// functionality to mount nodes to the provided position, update itself as a result of any state
@@ -29,4 +33,32 @@ pub trait Dynamic {
     /// Ideally, `changed` should not be included, and renderables should (somehow) register
     /// sub-fragments to the original controller, to avoid this implemenetation detail.
     fn update(&mut self, changed: &[usize]);
+}
+
+impl<D: Dynamic + ?Sized> Dynamic for Box<D> {
+    fn mount(&mut self, location: &Location) {
+        self.as_mut().mount(location);
+    }
+
+    fn detach(&mut self, top_level: bool) {
+        self.as_mut().detach(top_level);
+    }
+
+    fn update(&mut self, changed: &[usize]) {
+        self.as_mut().update(changed);
+    }
+}
+
+impl<D: Dynamic + ?Sized> Dynamic for Rc<RefCell<D>> {
+    fn mount(&mut self, location: &Location) {
+        self.borrow_mut().mount(location);
+    }
+
+    fn detach(&mut self, top_level: bool) {
+        self.borrow_mut().detach(top_level);
+    }
+
+    fn update(&mut self, changed: &[usize]) {
+        self.borrow_mut().update(changed);
+    }
 }

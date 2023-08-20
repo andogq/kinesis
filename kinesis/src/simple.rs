@@ -4,23 +4,32 @@ use crate::{
     component::Component,
     fragment::{Fragment, FragmentBuilder, Node},
 };
-use web_sys::Event;
+use web_sys::{console, Event};
 
-pub struct Nested;
-impl Nested {
+pub struct BoldText(String);
+impl BoldText {
     pub fn new() -> (Rc<RefCell<Self>>, FragmentBuilder) {
-        let component = Rc::new(RefCell::new(Self));
+        let component = Rc::new(RefCell::new(Self(String::new())));
 
         let fragment = Fragment::build()
             .with_element("p", None)
-            .with_text("nested", Some(0));
+            .with_text("Bolded this text: ", Some(0))
+            .with_element("b", Some(0))
+            .with_updatable(&[0], Some(2), {
+                let component = Rc::clone(&component);
+                move || {
+                    console::log_1(&"here".into());
+                    let component = component.borrow();
+                    Fragment::build().with_text(component.0.clone(), None)
+                }
+            });
 
         (component, fragment)
     }
 }
-impl Component for Nested {
+impl Component for BoldText {
     fn handle_event(&mut self, event_id: usize, event: Event) -> Option<Vec<usize>> {
-        todo!()
+        None
     }
 }
 
@@ -32,6 +41,8 @@ pub struct Simple {
 impl Simple {
     pub fn new() -> (Rc<RefCell<Self>>, FragmentBuilder) {
         let component = Rc::new(RefCell::new(Self { count: 0 }));
+
+        let (bold_text, bold_text_fragment_builder) = BoldText::new();
 
         let fragment = Fragment::build()
             .with_element("p", None)
@@ -74,7 +85,29 @@ impl Simple {
                     })) as Box<dyn Iterator<Item = FragmentBuilder>>
                 }
             })
-            .with_component(&[], None, Nested::new(), |_| {});
+            .with_component(
+                &[0],
+                None,
+                (Rc::clone(&bold_text), bold_text_fragment_builder),
+                {
+                    let component = Rc::clone(&component);
+                    let bold_text = Rc::clone(&bold_text);
+
+                    move |changed| {
+                        let component = component.borrow();
+                        let mut bold_text = bold_text.borrow_mut();
+
+                        console::log_1(&"update".into());
+
+                        changed.iter().for_each(|changed| match changed {
+                            0 => bold_text.0 = component.count.to_string(),
+                            _ => (),
+                        });
+
+                        changed.to_vec()
+                    }
+                },
+            );
 
         (component, fragment)
     }

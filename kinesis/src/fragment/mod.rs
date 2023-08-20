@@ -1,5 +1,5 @@
 mod builder;
-mod dom_renderable;
+mod dynamic;
 mod event_registry;
 mod util;
 
@@ -7,7 +7,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{component::Component, nested::NestedController, util::HashMapList};
 pub use builder::*;
-pub use dom_renderable::Dynamic;
+pub use dynamic::Dynamic;
 pub use event_registry::EventRegistry;
 pub use util::*;
 use web_sys::{console, Document, Node as WsNode};

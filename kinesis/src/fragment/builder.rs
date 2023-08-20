@@ -2,14 +2,11 @@ use std::{cell::RefCell, iter, rc::Rc};
 
 use web_sys::Document;
 
-use crate::{
-    component::Component,
-    nested::{NestedComponent, UpdateComponentFn},
-};
+use crate::component::{Component, Controller};
 
 use super::{
-    dom_renderable::{GetIterFn, Iterator},
-    EventRegistry, Fragment, Node,
+    dynamic::{GetIterFn, Iterator, UpdateProxy, UpdateProxyFn},
+    Dynamic, EventRegistry, Fragment, Node,
 };
 
 /// Builder for a [`super::Node`].
@@ -18,23 +15,8 @@ pub struct NodeBuilder {
     location: Option<usize>,
 }
 
-/// Builder for a [`Iterator`].
-pub struct IteratorBuilder {
-    get_items: GetIterFn,
-}
-
-impl IteratorBuilder {
-    pub fn build(
-        self,
-        document: &Document,
-        event_registry: &Rc<RefCell<EventRegistry>>,
-    ) -> Iterator {
-        Iterator::new(document, self.get_items, event_registry)
-    }
-}
-
 /// Wrapper types for builders, containing common information between the builders.
-pub struct Builder<T> {
+pub struct Builder {
     /// A list of dependencies that the built result will rely on.
     dependencies: Vec<usize>,
 
@@ -43,17 +25,49 @@ pub struct Builder<T> {
     location: Option<usize>,
 
     /// The builder with specific fields.
-    builder: T,
+    builder: Box<dyn DynamicBuilder>,
 }
 
-impl<T> Builder<T> {
-    /// Create a new builder.
-    pub fn new(dependencies: &[usize], location: Option<usize>, builder: T) -> Self {
-        Self {
-            dependencies: dependencies.to_vec(),
-            location,
-            builder,
-        }
+trait DynamicBuilder {
+    fn build(
+        self: Box<Self>,
+        document: &Document,
+        event_registry: &Rc<RefCell<EventRegistry>>,
+    ) -> Box<dyn Dynamic>;
+}
+
+/// Builder for a [`Iterator`].
+pub struct IteratorBuilder {
+    /// A function that will return an iterator of [`FragmentBuilder`]s.
+    get_items: GetIterFn,
+}
+
+impl DynamicBuilder for IteratorBuilder {
+    fn build(
+        self: Box<Self>,
+        document: &Document,
+        event_registry: &Rc<RefCell<EventRegistry>>,
+    ) -> Box<dyn Dynamic> {
+        Box::new(Iterator::new(document, self.get_items, event_registry))
+    }
+}
+
+pub struct ControllerBuilder {
+    component: Rc<RefCell<dyn Component>>,
+    fragment_builder: FragmentBuilder,
+    map_changed: Box<UpdateProxyFn>,
+}
+
+impl DynamicBuilder for ControllerBuilder {
+    fn build(
+        self: Box<Self>,
+        document: &Document,
+        _event_registry: &Rc<RefCell<EventRegistry>>,
+    ) -> Box<dyn Dynamic> {
+        Box::new(UpdateProxy::new(
+            Controller::new(document, (self.component, self.fragment_builder)),
+            self.map_changed,
+        ))
     }
 }
 
@@ -63,10 +77,7 @@ pub struct FragmentBuilder {
     /// Static nodes to be rendered within this fragment.
     nodes: Vec<NodeBuilder>,
 
-    /// Iterators that will be rendered within this fragment
-    iterators: Vec<Builder<IteratorBuilder>>,
-
-    components: Vec<Builder<NestedComponent<dyn Component>>>,
+    dynamic: Vec<Builder>,
 }
 
 impl FragmentBuilder {
@@ -74,8 +85,7 @@ impl FragmentBuilder {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
-            iterators: Vec::new(),
-            components: Vec::new(),
+            dynamic: Vec::new(),
         }
     }
 
@@ -95,13 +105,13 @@ impl FragmentBuilder {
     where
         F: 'static + Fn() -> Box<dyn std::iter::Iterator<Item = FragmentBuilder>>,
     {
-        self.iterators.push(Builder::new(
-            dependencies,
+        self.dynamic.push(Builder {
+            dependencies: dependencies.to_vec(),
             location,
-            IteratorBuilder {
+            builder: Box::new(IteratorBuilder {
                 get_items: Box::new(get_items) as GetIterFn,
-            },
-        ));
+            }),
+        });
         self
     }
 
@@ -114,17 +124,17 @@ impl FragmentBuilder {
     ) -> Self
     where
         C: Component + 'static,
-        F: Fn(&[usize]) + 'static,
+        F: 'static + Fn(&[usize]) -> Vec<usize>,
     {
-        self.components.push(Builder::new(
-            dependencies,
+        self.dynamic.push(Builder {
+            dependencies: dependencies.to_vec(),
             location,
-            NestedComponent {
+            builder: Box::new(ControllerBuilder {
                 component: component as Rc<RefCell<dyn Component>>,
                 fragment_builder,
-                update: Box::new(update) as Box<UpdateComponentFn>,
-            },
-        ));
+                map_changed: Box::new(update),
+            }),
+        });
 
         self
     }
@@ -133,7 +143,7 @@ impl FragmentBuilder {
     /// whenever a dependency changes. This creates an [`iter::Iterator`], as with
     /// [`Self::with_iter()`].
     pub fn with_updatable<F>(
-        mut self,
+        self,
         dependencies: &[usize],
         location: Option<usize>,
         get_fragment: F,
@@ -141,14 +151,9 @@ impl FragmentBuilder {
     where
         F: 'static + Fn() -> FragmentBuilder,
     {
-        self.iterators.push(Builder::new(
-            dependencies,
-            location,
-            IteratorBuilder {
-                get_items: Box::new(move || Box::new(iter::once(get_fragment()))),
-            },
-        ));
-        self
+        self.with_iter(dependencies, location, move || {
+            Box::new(iter::once(get_fragment()))
+        })
     }
 
     /// Helper function to create a 'conditional' fragment, meaning a fragment that may be
@@ -156,7 +161,7 @@ impl FragmentBuilder {
     /// component depending on some condition that is passed in. This utilises [`bool::then()`] to
     /// create an [`Option`] containing the built fragment.
     pub fn with_conditional<F, B>(
-        mut self,
+        self,
         dependencies: &[usize],
         location: Option<usize>,
         check_condition: F,
@@ -166,17 +171,9 @@ impl FragmentBuilder {
         F: 'static + Fn() -> bool,
         B: 'static + Fn() -> FragmentBuilder,
     {
-        self.iterators.push(Builder::new(
-            dependencies,
-            location,
-            IteratorBuilder {
-                get_items: Box::new(move || {
-                    Box::new(check_condition().then(&build_fragment).into_iter())
-                }),
-            },
-        ));
-
-        self
+        self.with_iter(dependencies, location, move || {
+            Box::new(check_condition().then(&build_fragment).into_iter())
+        })
     }
 
     /// Helper function to add an element [`Node`].
@@ -202,7 +199,7 @@ impl FragmentBuilder {
             .into_iter()
             .for_each(|NodeBuilder { node, location }| fragment.with_static_node(node, location));
 
-        self.iterators.into_iter().for_each(
+        self.dynamic.into_iter().for_each(
             |Builder {
                  dependencies,
                  location,
@@ -213,16 +210,6 @@ impl FragmentBuilder {
                     &dependencies,
                     location,
                 );
-            },
-        );
-
-        self.components.into_iter().for_each(
-            |Builder {
-                 dependencies,
-                 location,
-                 builder,
-             }| {
-                fragment.with_dynamic(builder.into_controller(document), &dependencies, location);
             },
         );
 

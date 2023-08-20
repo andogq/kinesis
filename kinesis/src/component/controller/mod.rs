@@ -93,11 +93,7 @@ where
         self.fragment.detach(top_level);
     }
 
-    /// Note: `changed` is the parent controller's changed properties, which will need to be mapped
-    /// to this controller's properties somehow.
     fn update(&mut self, changed: &[usize]) {
-        // TODO: Might be redundant if context is updated from the parent down
-        // let component = self.component.borrow();
-        // self.fragment.update(component.get_context(), &[]);
+        self.fragment.update(changed);
     }
 }
