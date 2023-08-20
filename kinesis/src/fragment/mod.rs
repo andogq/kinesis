@@ -5,12 +5,12 @@ mod util;
 
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{component::Component, nested::NestedController, util::HashMapList};
+use crate::util::HashMapList;
 pub use builder::*;
 pub use dynamic::Dynamic;
 pub use event_registry::EventRegistry;
 pub use util::*;
-use web_sys::{console, Document, Node as WsNode};
+use web_sys::{Document, Node as WsNode};
 
 /// A top level representation of a fragment. Can contain static data, or iterators of fragments.
 /// Is responsible for mounting/updating/detaching itself and all children. Importantly, it will
@@ -21,17 +21,14 @@ pub struct Fragment {
     /// A reference to the [`Document`].
     document: Document,
 
-    /// Collection of all renderables (eg [`dom_renderable::Iterator`]).
-    renderables: Vec<(Option<usize>, Box<dyn Dynamic>)>,
-
-    /// Nested controllers within this fragment.
-    controllers: Vec<(Option<usize>, NestedController<dyn Component>)>,
+    /// Collection of all dynamic items (eg [`dynamic::Iterator`]).
+    dynamic: Vec<(Option<usize>, Box<dyn Dynamic>)>,
 
     /// Collection of static [`web_sys::Node`]s, and a reference to the static node that it should
     /// be mounted in.
     static_nodes: Vec<(Option<usize>, WsNode)>,
 
-    /// Collection mapping between context properties (key), and the renderables that rely on it
+    /// Collection mapping between context properties (key), and the dynamic thing that rely on it
     /// (value).
     dependencies: HashMapList<usize, usize>,
 
@@ -53,9 +50,7 @@ impl Fragment {
         Self {
             document: document.clone(),
 
-            renderables: Vec::new(),
-
-            controllers: Vec::new(),
+            dynamic: Vec::new(),
 
             static_nodes: Vec::new(),
 
@@ -84,9 +79,9 @@ impl Fragment {
     where
         P: 'static + Dynamic,
     {
-        let id = self.renderables.len();
+        let id = self.dynamic.len();
 
-        self.renderables
+        self.dynamic
             .push((location, Box::new(part) as Box<dyn Dynamic>));
         self.register_dependencies(id, dependencies);
 
@@ -95,8 +90,8 @@ impl Fragment {
 
     /// Performs a full update on the fragment.
     ///
-    /// This uses the [`DomRenderable::update()`] method, a generated dependency list based off of
-    /// the registered dependencies of [`DomRenderable`]s.
+    /// This uses the [`Dynamic::update()`] method, a generated dependency list based off of
+    /// the registered dependencies of [`Dynamic`]s.
     pub fn full_update(&mut self) {
         Dynamic::update(
             self,
@@ -133,7 +128,7 @@ impl Dynamic for Fragment {
                 .mount(node);
         });
 
-        self.renderables.iter_mut().for_each(|(parent_id, part)| {
+        self.dynamic.iter_mut().for_each(|(parent_id, part)| {
             part.mount(
                 &parent_id
                     .map(|parent_id| {
@@ -149,23 +144,6 @@ impl Dynamic for Fragment {
             )
         });
 
-        self.controllers.iter_mut().for_each(|(parent_id, nested)| {
-            console::log_1(&format!("rendering controller {parent_id:?}").into());
-            nested.controller.borrow_mut().mount(
-                &parent_id
-                    .map(|parent_id| {
-                        Location::parent(
-                            &self
-                                .static_nodes
-                                .get(parent_id)
-                                .expect("location to exist")
-                                .1,
-                        )
-                    })
-                    .unwrap_or(location.clone()),
-            );
-        });
-
         self.mounted = true;
     }
 
@@ -177,26 +155,18 @@ impl Dynamic for Fragment {
                 .expect("to remove child");
         });
 
-        self.renderables
+        self.dynamic
             .iter_mut()
             .for_each(|(_, part)| part.detach(top_level));
-
-        self.controllers.iter_mut().for_each(|(_, nested)| {
-            nested.controller.borrow_mut().detach(top_level);
-        });
 
         self.mounted = false;
     }
 
     fn update(&mut self, changed: &[usize]) {
         if self.mounted {
-            self.renderables
+            self.dynamic
                 .iter_mut()
                 .for_each(|(_, part)| part.update(changed));
-
-            self.controllers
-                .iter_mut()
-                .for_each(|(_, nested)| nested.update(changed));
         }
     }
 }

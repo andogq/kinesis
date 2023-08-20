@@ -17,7 +17,7 @@ pub trait Dynamic {
     /// controller.
     fn mount(&mut self, location: &Location);
 
-    /// Detach self from the DOM. Should result in everying mounted in [`Self::mount()`] being
+    /// Detach self from the DOM. Should result in everying mounted in [`Dynamic::mount()`] being
     /// unmounted. `top_level` indicates that this item is at the top level of the item being
     /// detached, indicating that it must be detached. If something is a child of one of the
     /// mounted nodes within this item, it doesn't need to be detached given that it's parent is.
@@ -28,10 +28,7 @@ pub trait Dynamic {
 
     /// Update self due to a state change. Identifiers corresponding to the changed fields will be
     /// included as `changed`, however these should only be used to propagate changes to child
-    /// [`super::fragment::Fragment`]s.
-    ///
-    /// Ideally, `changed` should not be included, and renderables should (somehow) register
-    /// sub-fragments to the original controller, to avoid this implemenetation detail.
+    /// [`super::Fragment`]s.
     fn update(&mut self, changed: &[usize]);
 }
 

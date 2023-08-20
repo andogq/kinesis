@@ -1,4 +1,4 @@
-use std::{any::Any, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use super::Dynamic;
 use crate::fragment::{EventRegistry, Fragment, FragmentBuilder, Location};

@@ -1,7 +1,7 @@
 use web_sys::Node as WsNode;
 
 /// Expresses a location relative to a [`web_sys::Node`] in the DOM. Primarily used for directing a
-/// [`super::super::DomRenderable`] when mounting it to the DOM.
+/// [`super::super::Dynamic`] when mounting it to the DOM.
 #[derive(Clone)]
 pub struct Location {
     /// The parent to mount the [`web_sys::Node`] within.
