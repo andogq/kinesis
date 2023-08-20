@@ -2,7 +2,7 @@ use std::{cell::RefCell, iter, rc::Rc};
 
 use web_sys::Document;
 
-use crate::component::{Component, Controller};
+use crate::component::{Component, ComponentWrapper, Controller};
 
 use super::{
     dynamic::{GetIterFn, Iterator, UpdateProxy, UpdateProxyFn},
@@ -53,8 +53,7 @@ impl DynamicBuilder for IteratorBuilder {
 }
 
 pub struct ControllerBuilder {
-    component: Rc<RefCell<dyn Component>>,
-    fragment_builder: FragmentBuilder,
+    component: ComponentWrapper<dyn Component>,
     map_changed: Box<UpdateProxyFn>,
 }
 
@@ -65,7 +64,7 @@ impl DynamicBuilder for ControllerBuilder {
         _event_registry: &Rc<RefCell<EventRegistry>>,
     ) -> Box<dyn Dynamic> {
         Box::new(UpdateProxy::new(
-            Controller::new(document, (self.component, self.fragment_builder)),
+            Controller::new(document, self.component),
             self.map_changed,
         ))
     }
@@ -119,7 +118,7 @@ impl FragmentBuilder {
         mut self,
         dependencies: &[usize],
         location: Option<usize>,
-        (component, fragment_builder): (Rc<RefCell<C>>, FragmentBuilder),
+        component: ComponentWrapper<C>,
         update: F,
     ) -> Self
     where
@@ -130,8 +129,7 @@ impl FragmentBuilder {
             dependencies: dependencies.to_vec(),
             location,
             builder: Box::new(ControllerBuilder {
-                component: component as Rc<RefCell<dyn Component>>,
-                fragment_builder,
+                component: component.into_any(),
                 map_changed: Box::new(update),
             }),
         });

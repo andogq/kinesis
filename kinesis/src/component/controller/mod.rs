@@ -1,5 +1,5 @@
-use super::Component;
-use crate::fragment::{Dynamic, EventRegistry, Fragment, FragmentBuilder, Location};
+use super::{Component, ComponentWrapper};
+use crate::fragment::{Dynamic, EventRegistry, Fragment, Location};
 use std::{cell::RefCell, rc::Rc};
 use web_sys::Document;
 
@@ -29,10 +29,7 @@ where
     C: Component + ?Sized + 'static,
 {
     /// Create a new controller, returning a shared reference to the controller.
-    pub fn new(
-        document: &Document,
-        (component, fragment_builder): (Rc<RefCell<C>>, FragmentBuilder),
-    ) -> Rc<RefCell<Self>> {
+    pub fn new(document: &Document, component: ComponentWrapper<C>) -> Rc<RefCell<Self>> {
         // Create a reference to this controller. Initially contains `None`, however once the
         // controller is constructed it will be swapped in.
         let controller_reference = Rc::new(RefCell::new(Option::<Rc<RefCell<Self>>>::None));
@@ -41,7 +38,7 @@ where
         let event_registry = EventRegistry::new({
             // Clone references that are required for use in the event registry.
             let controller_reference = Rc::clone(&controller_reference);
-            let component = Rc::clone(&component);
+            let component = component.clone_component();
 
             move |event_id, event| {
                 // Perform a callback on the component
@@ -55,11 +52,11 @@ where
         });
 
         // Create the fragment for the component, passing it a reference to the event registry.
-        let fragment = fragment_builder.build(document, &event_registry);
+        let fragment = component.fragment_builder.build(document, &event_registry);
 
         // Create the controller within a shared reference.
         let controller = Rc::new(RefCell::new(Self {
-            component,
+            component: component.component,
             event_registry,
             fragment,
         }));

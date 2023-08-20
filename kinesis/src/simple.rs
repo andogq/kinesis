@@ -1,14 +1,14 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    component::Component,
+    component::{Component, ComponentWrapper},
     fragment::{Fragment, FragmentBuilder, Node},
 };
 use web_sys::{console, Event};
 
 pub struct BoldText(String);
 impl BoldText {
-    pub fn new() -> (Rc<RefCell<Self>>, FragmentBuilder) {
+    pub fn new() -> ComponentWrapper<Self> {
         let component = Rc::new(RefCell::new(Self(String::new())));
 
         let fragment = Fragment::build()
@@ -24,7 +24,7 @@ impl BoldText {
                 }
             });
 
-        (component, fragment)
+        ComponentWrapper::new(component, fragment)
     }
 }
 impl Component for BoldText {
@@ -39,16 +39,17 @@ pub struct Simple {
 }
 
 impl Simple {
-    pub fn new() -> (Rc<RefCell<Self>>, FragmentBuilder) {
-        let component = Rc::new(RefCell::new(Self { count: 0 }));
+    pub fn new() -> ComponentWrapper<Self> {
+        let component_ref = Rc::new(RefCell::new(Self { count: 0 }));
 
-        let (bold_text, bold_text_fragment_builder) = BoldText::new();
+        let bold_text = BoldText::new();
+        let bold_text_ref = bold_text.clone_component();
 
         let fragment = Fragment::build()
             .with_element("p", None)
             .with_text("some content: ", Some(0))
             .with_updatable(&[0], Some(0), {
-                let ctx = Rc::clone(&component);
+                let ctx = Rc::clone(&component_ref);
                 move || {
                     let ctx = ctx.borrow();
                     Fragment::build().with_text(ctx.count.to_string(), None)
@@ -62,7 +63,7 @@ impl Simple {
                 &[0],
                 None,
                 {
-                    let ctx = Rc::clone(&component);
+                    let ctx = Rc::clone(&component_ref);
                     move || {
                         let ctx = ctx.borrow();
                         ctx.count % 2 == 0
@@ -75,7 +76,7 @@ impl Simple {
                 },
             )
             .with_iter(&[0], None, {
-                let ctx = Rc::clone(&component);
+                let ctx = Rc::clone(&component_ref);
                 move || {
                     let ctx = ctx.borrow();
                     Box::new((0..ctx.count).map(|val| {
@@ -85,31 +86,26 @@ impl Simple {
                     })) as Box<dyn Iterator<Item = FragmentBuilder>>
                 }
             })
-            .with_component(
-                &[0],
-                None,
-                (Rc::clone(&bold_text), bold_text_fragment_builder),
-                {
-                    let component = Rc::clone(&component);
-                    let bold_text = Rc::clone(&bold_text);
+            .with_component(&[0], None, bold_text, {
+                let component = Rc::clone(&component_ref);
+                let bold_text = bold_text_ref;
 
-                    move |changed| {
-                        let component = component.borrow();
-                        let mut bold_text = bold_text.borrow_mut();
+                move |changed| {
+                    let component = component.borrow();
+                    let mut bold_text = bold_text.borrow_mut();
 
-                        console::log_1(&"update".into());
+                    console::log_1(&"update".into());
 
-                        changed.iter().for_each(|changed| match changed {
-                            0 => bold_text.0 = component.count.to_string(),
-                            _ => (),
-                        });
+                    changed.iter().for_each(|changed| match changed {
+                        0 => bold_text.0 = component.count.to_string(),
+                        _ => (),
+                    });
 
-                        changed.to_vec()
-                    }
-                },
-            );
+                    changed.to_vec()
+                }
+            });
 
-        (component, fragment)
+        ComponentWrapper::new(component_ref, fragment)
     }
 }
 
