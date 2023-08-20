@@ -1,7 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
-
 use super::Dynamic;
-use crate::fragment::{EventRegistry, Fragment, FragmentBuilder, Location};
+use crate::event_registry::EventRegistry;
+use crate::fragment::{Fragment, FragmentBuilder, Location};
+
+use std::{cell::RefCell, rc::Rc};
 use web_sys::{Document, Node as WsNode};
 
 /// A function that returns an [`Iterator`] of [`FragmentBuilder`]s, for the given context.

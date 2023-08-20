@@ -1,15 +1,13 @@
 mod builder;
-mod dynamic;
-mod event_registry;
 mod util;
 
-use std::{cell::RefCell, rc::Rc};
-
+use crate::dynamic::Dynamic;
+use crate::event_registry::EventRegistry;
 use crate::util::HashMapList;
 pub use builder::*;
-pub use dynamic::Dynamic;
-pub use event_registry::EventRegistry;
 pub use util::*;
+
+use std::{cell::RefCell, rc::Rc};
 use web_sys::{Document, Node as WsNode};
 
 /// A top level representation of a fragment. Can contain static data, or iterators of fragments.

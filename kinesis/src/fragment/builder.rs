@@ -1,13 +1,10 @@
+use super::{EventRegistry, Fragment, Node};
+use crate::component::{Component, ComponentWrapper};
+use crate::dynamic::{Dynamic, GetIterFn, Iterator, UpdateProxy, UpdateProxyFn};
+use crate::Controller;
+
 use std::{cell::RefCell, iter, rc::Rc};
-
 use web_sys::Document;
-
-use crate::component::{Component, ComponentWrapper, Controller};
-
-use super::{
-    dynamic::{GetIterFn, Iterator, UpdateProxy, UpdateProxyFn},
-    Dynamic, EventRegistry, Fragment, Node,
-};
 
 /// Builder for a [`super::Node`].
 pub struct NodeBuilder {

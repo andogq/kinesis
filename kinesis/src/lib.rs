@@ -1,11 +1,13 @@
 mod component;
+mod controller;
+mod dynamic;
+mod event_registry;
 mod fragment;
-mod nested;
 mod util;
 
 mod simple;
 
-use component::Controller;
+use controller::Controller;
 use simple::Simple;
 use wasm_bindgen::prelude::*;
 use web_sys::window;

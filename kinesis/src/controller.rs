@@ -1,5 +1,8 @@
-use super::{Component, ComponentWrapper};
-use crate::fragment::{Dynamic, EventRegistry, Fragment, Location};
+use crate::component::{Component, ComponentWrapper};
+use crate::dynamic::Dynamic;
+use crate::event_registry::EventRegistry;
+use crate::fragment::{Fragment, Location};
+
 use std::{cell::RefCell, rc::Rc};
 use web_sys::Document;
 
