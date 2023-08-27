@@ -1,8 +1,9 @@
-use crate::fragment::Location;
+use web_sys::console;
 
 use super::Dynamic;
+use crate::fragment::Location;
 
-pub type UpdateProxyFn = dyn Fn(&[usize]) -> Vec<usize>;
+pub type UpdateFn = dyn Fn(&[usize]) -> Option<Vec<usize>>;
 
 /// A proxy for [`Dynamic`] things, allowing for a custom `update` function to be called before the
 /// original `update` is called.
@@ -12,7 +13,7 @@ pub struct UpdateProxy {
 
     /// The update function to run before the original update function. This can include re-writing
     /// the changed dependencies, which can be passed onwards.
-    proxy_update: Box<UpdateProxyFn>,
+    proxy_update: Box<UpdateFn>,
 }
 
 impl UpdateProxy {
@@ -20,11 +21,11 @@ impl UpdateProxy {
     pub fn new<D, U>(dynamic: D, proxy_update: U) -> Self
     where
         D: 'static + Dynamic,
-        U: 'static + Fn(&[usize]) -> Vec<usize>,
+        U: 'static + Fn(&[usize]) -> Option<Vec<usize>>,
     {
         Self {
             dynamic: Box::new(dynamic) as Box<dyn Dynamic>,
-            proxy_update: Box::new(proxy_update) as Box<UpdateProxyFn>,
+            proxy_update: Box::new(proxy_update) as Box<UpdateFn>,
         }
     }
 }
@@ -40,9 +41,11 @@ impl Dynamic for UpdateProxy {
 
     fn update(&mut self, changed: &[usize]) {
         // Run the update function
-        let changed = (self.proxy_update)(changed);
-
-        // Run the original dynamic update
-        self.dynamic.update(&changed);
+        if let Some(changed) = (self.proxy_update)(changed) {
+            // Run the original dynamic update
+            console::log_1(&"about to borrow".into());
+            self.dynamic.update(&changed);
+            console::log_1(&"successful borrow".into());
+        }
     }
 }

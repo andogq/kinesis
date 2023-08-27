@@ -1,6 +1,6 @@
 use super::{EventRegistry, Fragment, Node};
 use crate::component::{Component, ComponentWrapper};
-use crate::dynamic::{Dynamic, GetIterFn, Iterator, UpdateProxy, UpdateProxyFn};
+use crate::dynamic::{Dynamic, GetIterFn, Iterator, UpdateFn, UpdateProxy};
 use crate::Controller;
 
 use std::{cell::RefCell, iter, rc::Rc};
@@ -51,7 +51,8 @@ impl DynamicBuilder for IteratorBuilder {
 
 pub struct ControllerBuilder {
     component: ComponentWrapper<dyn Component>,
-    map_changed: Box<UpdateProxyFn>,
+    map_changed: Box<UpdateFn>,
+    bound_update: Option<Box<UpdateFn>>,
 }
 
 impl DynamicBuilder for ControllerBuilder {
@@ -61,7 +62,7 @@ impl DynamicBuilder for ControllerBuilder {
         _event_registry: &Rc<RefCell<EventRegistry>>,
     ) -> Box<dyn Dynamic> {
         Box::new(UpdateProxy::new(
-            Controller::new(document, self.component),
+            Controller::new(document, self.component, self.bound_update),
             self.map_changed,
         ))
     }
@@ -111,16 +112,18 @@ impl FragmentBuilder {
         self
     }
 
-    pub fn with_component<C, F>(
+    pub fn with_component<C, F, B>(
         mut self,
         dependencies: &[usize],
         location: Option<usize>,
         component: ComponentWrapper<C>,
         update: F,
+        bound_update: Option<B>,
     ) -> Self
     where
         C: Component + 'static,
-        F: 'static + Fn(&[usize]) -> Vec<usize>,
+        F: 'static + Fn(&[usize]) -> Option<Vec<usize>>,
+        B: 'static + Fn(&[usize]) -> Option<Vec<usize>>,
     {
         self.dynamic.push(Builder {
             dependencies: dependencies.to_vec(),
@@ -128,6 +131,8 @@ impl FragmentBuilder {
             builder: Box::new(ControllerBuilder {
                 component: component.into_any(),
                 map_changed: Box::new(update),
+                bound_update: bound_update
+                    .map(|bound_update| Box::new(bound_update) as Box<UpdateFn>),
             }),
         });
 

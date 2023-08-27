@@ -7,7 +7,7 @@ mod util;
 
 mod simple;
 
-use controller::Controller;
+use controller::{Controller, ControllerRef};
 use simple::Simple;
 use wasm_bindgen::prelude::*;
 use web_sys::window;
@@ -23,7 +23,9 @@ pub fn main() -> Result<(), JsValue> {
     let document = window.document().expect("should have a document on window");
     let body = document.body().expect("body to exist");
 
-    let component = Controller::<Simple>::new(&document, Simple::new());
+    let controller_ref = ControllerRef::new();
+    let component = Controller::<Simple>::new(&document, Simple::new(&controller_ref), None);
+    controller_ref.replace_with(&component);
     component.borrow_mut().mount(&Location::parent(&body));
 
     Ok(())
